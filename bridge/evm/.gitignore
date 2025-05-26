@@ -11,3 +11,8 @@ lcov.info
 broadcast/**/31337
 
 dependencies
+
+# certora
+.certora_internal
+.venv/
+emv-*/
