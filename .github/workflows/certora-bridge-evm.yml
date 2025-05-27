@@ -29,7 +29,7 @@ jobs:
       - name: foundry install
         run: |
           forge --version
-          forge soldeer install --recursive-deps --clean -vv
+          forge soldeer install --recursive-deps --clean -v
 
       - name: run configs
         uses: Certora/certora-run-action@v1
