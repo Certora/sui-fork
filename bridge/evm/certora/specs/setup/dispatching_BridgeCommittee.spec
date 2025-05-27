@@ -1,3 +1,3 @@
 methods {
-function _.proxiableUUID() external => DISPATCHER(true);
+    function _.proxiableUUID() external => NONDET;
 }
