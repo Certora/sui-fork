@@ -28,7 +28,11 @@ jobs:
 
       - name: foundry install
         run: |
+          echo "forge --version"
           forge --version
+          echo "forge soldeer version"
+          forge soldeer version
+          echo "forge soldeer install"
           forge soldeer install --recursive-deps --clean
 
       - name: run configs
