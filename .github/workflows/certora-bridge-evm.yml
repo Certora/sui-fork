@@ -28,6 +28,7 @@ jobs:
 
       - name: foundry install
         run: |
+          forge --version
           forge soldeer install --recursive-deps --clean -vv
 
       - name: run configs
