@@ -5,8 +5,8 @@ on: pull_request
 env:
   FOUNDRY_PROFILE: ci
   CONFIGS: |
-    bridge/evm/certora/confs/sanity_BridgeCommittee.conf
-    bridge/evm/certora/confs/sanity_BridgeConfig.conf
+    bridge/evm/certora/confs/setup/sanity_BridgeCommittee.conf
+    bridge/evm/certora/confs/setup/sanity_BridgeConfig.conf
 
 jobs:
   check:
