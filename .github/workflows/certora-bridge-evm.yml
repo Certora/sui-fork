@@ -11,8 +11,6 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
-    env:
-      working-directory: bridge/evm/
     permissions:
       contents: read
       statuses: write
@@ -28,6 +26,7 @@ jobs:
 
       - name: foundry install
         run: |
+          cd bridge/evm/
           echo "forge --version"
           forge --version
           echo "forge soldeer version"
@@ -37,6 +36,7 @@ jobs:
 
       - name: run configs
         uses: Certora/certora-run-action@v1
+        working-directory: bridge/evm/
         with:
           use-alpha: true
           configurations: ${{ env.CONFIGS }}
