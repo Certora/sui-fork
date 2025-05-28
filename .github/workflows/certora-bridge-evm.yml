@@ -5,8 +5,8 @@ on: pull_request
 env:
   FOUNDRY_PROFILE: ci
   CONFIGS: |
-    bridge/evm/certora/confs/setup/sanity_BridgeCommittee.conf
-    bridge/evm/certora/confs/setup/sanity_BridgeConfig.conf
+    certora/confs/setup/sanity_BridgeCommittee.conf
+    certora/confs/setup/sanity_BridgeConfig.conf
 
 jobs:
   check:
@@ -43,5 +43,6 @@ jobs:
           solc-remove-version-prefix: "0."
           job-name: "Verified Rules"
           certora-key: ${{ secrets.CERTORAKEY }}
+          working-directory: bridge/evm/
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
