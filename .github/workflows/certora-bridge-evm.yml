@@ -5,8 +5,8 @@ on: pull_request
 env:
   FOUNDRY_PROFILE: ci
   CONFIGS: |
-    certora/confs/sanity_BridgeCommittee.conf
-    certora/confs/sanity_BridgeConfig.conf
+    bridge/evm/certora/confs/sanity_BridgeCommittee.conf
+    bridge/evm/certora/confs/sanity_BridgeConfig.conf
 
 jobs:
   check:
@@ -36,7 +36,6 @@ jobs:
 
       - name: run configs
         uses: Certora/certora-run-action@v1
-        working-directory: bridge/evm/
         with:
           use-alpha: true
           configurations: ${{ env.CONFIGS }}
