@@ -1,3 +1,4 @@
+import "snippet_uups.spec";
+
 methods {
-    function _.proxiableUUID() external => NONDET;
 }

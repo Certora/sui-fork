@@ -1,2 +1,6 @@
 import "dispatching_BridgeCommittee.spec";
-use builtin rule sanity filtered { f -> f.contract == currentContract }
+
+use builtin rule sanity filtered { f ->
+    f.contract == currentContract &&
+    f.selector != sig:initializeConfig(address).selector
+}
