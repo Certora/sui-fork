@@ -15,14 +15,33 @@ methods {
     function MockUSDT.decimals() external returns (uint8) envfree;
     function WETH.decimals() external returns (uint8) envfree;
 
+    function _.allowance(address owner, address spender) external with(env e) => CVL_allowance(e, calledContract, owner, spender) expect uint256;
+    function _.balanceOf(address account) external with(env e) => CVL_balanceOf(e, calledContract, account) expect uint256;
     function _.decimals() external with(env e) => CVL_decimals(e, calledContract) expect uint8;
+    function _.transferFrom(address from, address to, uint256 value) external with(env e) => CVL_transferFrom(e, calledContract, from, to, value) expect bool;
 }
 
-function CVL_decimals(env e, address callee) returns uint8 {
+function isToken(address callee) {
     require(
         callee == MockWBTC || callee == MockUSDC || callee == MockUSDT || callee == WETH
     );
+}
+
+function CVL_allowance(env e, address callee, address owner, address spender) returns uint256 {
+    isToken(callee);
+    return callee.allowance(e, owner, spender);
+}
+function CVL_balanceOf(env e, address callee, address account) returns uint256 {
+    isToken(callee);
+    return callee.balanceOf(e, account);
+}
+function CVL_decimals(env e, address callee) returns uint8 {
+    isToken(callee);
     return callee.decimals(e);
+}
+function CVL_transferFrom(env e, address callee, address from, address to, uint256 value) returns bool {
+    isToken(callee);
+    return callee.transferFrom(e, from, to, value);
 }
 
 hook Sload address a BridgeConfig.supportedTokens[KEY uint8 tokenID].tokenAddress {
