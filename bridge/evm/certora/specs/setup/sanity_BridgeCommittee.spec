@@ -1,4 +1,5 @@
 import "dispatching_BridgeCommittee.spec";
+import "snippet_BridgeUtils.spec";
 
 methods {
     function _.splitSignature(bytes memory) internal => NONDET;

@@ -3,11 +3,11 @@ methods {
     function _._upgradeToAndCallUUPS(address newImplementation, bytes memory) internal => CVL_upgradeToAndCallUUPS(newImplementation) expect void;
 }
 
-ghost address implementation;
+ghost address UUPS_implementation;
 
 function CVL_getImplementation() returns address {
-    return implementation;
+    return UUPS_implementation;
 }
 function CVL_upgradeToAndCallUUPS(address newImplementation) {
-    implementation = newImplementation;
+    UUPS_implementation = newImplementation;
 }
