@@ -1,3 +1,5 @@
+// summarizes decoding functions
+// we might need to force them to behave like a function instead of a NONDET
 methods {
     function BridgeUtils.decodeBlocklistPayload(bytes memory _payload) internal
         returns (bool, address[] memory)

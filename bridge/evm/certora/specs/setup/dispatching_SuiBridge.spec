@@ -1,5 +1,3 @@
-import "setup_BridgeConfig.spec";
-
 methods {
     // Be careful that this doesn't summarize any other calls...
     function _.transfer(address a, uint256 v) external with(env e) => CVL_transfer(e,a,v) expect void;

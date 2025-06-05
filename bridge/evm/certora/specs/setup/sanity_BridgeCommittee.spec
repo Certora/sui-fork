@@ -1,10 +1,6 @@
 import "dispatching_BridgeCommittee.spec";
 import "snippet_BridgeUtils.spec";
-
-methods {
-    function _.splitSignature(bytes memory) internal => NONDET;
-    function _.tryRecover(bytes32 hash, bytes memory signature) internal => NONDET;
-}
+import "snippet_uups.spec";
 
 use builtin rule sanity filtered { f ->
     f.contract == currentContract &&
