@@ -1,5 +1,6 @@
 import "dispatching_SuiBridge.spec";
 import "snippet_BridgeUtils.spec";
+import "snippet_loopSummaries.spec";
 import "snippet_uups.spec";
 
 methods {
