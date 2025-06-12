@@ -1,2 +1,3 @@
+set -e
 sui move build --test
-java -Dlevel.move=info -Dreport.jimple -jar $CERTORA/emv.jar -movePath build/Bridge/bytecode_modules/ -moveSpec b::certora_rules -b 32
+java -Dlevel.move=debug -Dlevel.bmc=debug -Dreport.jimple -Dreport.heuristical.folding.rewrite -jar $CERTORA/emv.jar -movePath build/Bridge/bytecode_modules/ -moveSpec b::certora_rules
