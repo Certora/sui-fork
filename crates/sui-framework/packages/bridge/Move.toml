@@ -16,4 +16,6 @@ cvlm = "0x436572746f7261"
 [dev-dependencies]
 cvlm = { git = "https://github.com/Certora/cvl-move-proto.git", subdir = "cvlm", rev = "main" }
 certora_sui_summaries = { git = "https://github.com/Certora/cvl-move-proto.git", subdir = "certora_sui_summaries",  rev = "main" }
+# cvlm = { local = "/home/eric/src/cvl-move-proto/cvlm" }
+# certora_sui_summaries = { local = "/home/eric/src/cvl-move-proto/certora_sui_summaries" }
 

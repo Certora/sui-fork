@@ -1152,7 +1152,7 @@ module bridge::bridge_env {
         coin
     }
 
-    fun get_total_supply<T>(bridge: &Bridge): u64 {
+    public fun get_total_supply<T>(bridge: &Bridge): u64 {
         let inner = bridge.test_load_inner();
         let treasury = inner.inner_treasury();
         let treasuries = treasury.treasuries();
