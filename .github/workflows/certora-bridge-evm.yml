@@ -7,6 +7,9 @@ env:
   CONFIGS: |
     certora/confs/setup/sanity_BridgeCommittee.conf
     certora/confs/setup/sanity_BridgeConfig.conf
+    certora/confs/setup/sanity_BridgeLimiter.conf
+    certora/confs/setup/sanity_BridgeVault.conf
+    certora/confs/setup/sanity_SuiBridge.conf
 
 jobs:
   check:
