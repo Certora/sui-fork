@@ -1,4 +1,5 @@
 #[test_only]
+#[allow(unused_function)]
 module bridge::certora_rules;
 
 use bridge::bridge::{ 
