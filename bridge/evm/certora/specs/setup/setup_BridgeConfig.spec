@@ -22,6 +22,10 @@ methods {
     function _.balanceOf(address account) external with(env e) => CVL_balanceOf(e, calledContract, account) expect uint256;
     function _.decimals() external with(env e) => CVL_decimals(e, calledContract) expect uint8;
     function _.transferFrom(address from, address to, uint256 value) external with(env e) => CVL_transferFrom(e, calledContract, from, to, value) expect bool;
+
+    unresolved external in BridgeConfig.addTokensWithSignatures(bytes[],BridgeUtils.Message) => DISPATCH [
+        _.decimals()
+    ] default NONDET;
 }
 
 function isToken(address callee) {
