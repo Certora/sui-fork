@@ -22,6 +22,7 @@ public fun cvlm_manifest() {
     // Needs optimistic loop mode due to loop in committee::verify_signatures:
     //rule(b"approve_token_transfer_sanity");
     rule(b"claim_token_sanity");
+    rule(b"claim_and_transfer_token_sanity");
 }
 
 // #[rule]
@@ -86,4 +87,16 @@ fun claim_token_sanity(
     let result = bridge.claim_token<ETH>(clock, source_chain, bridge_seq_num, ctx);
     cvlm_assert!(false);
     result
+}
+
+// #[rule]
+fun claim_and_transfer_token_sanity(
+    bridge: &mut Bridge,
+    clock: &Clock,
+    source_chain: u8,
+    bridge_seq_num: u64,
+    ctx: &mut TxContext,
+) {
+    bridge.claim_and_transfer_token<ETH>(clock, source_chain, bridge_seq_num, ctx);
+    cvlm_assert!(false);
 }
