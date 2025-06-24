@@ -15,14 +15,17 @@ use cvlm::manifest::rule;
 
 public fun cvlm_manifest() {
     rule(b"committee_registration_sanity");
-    // Needs optimistic loop mode:
-    // rule(b"update_node_url");
+    // Needs optimistic loop mode due to loop in committee::update_node_url:
+    rule(b"update_node_url");
     rule(b"register_foreign_token_sanity");
     rule(b"send_token_sanity");
     // Needs optimistic loop mode due to loop in committee::verify_signatures:
-    //rule(b"approve_token_transfer_sanity");
+    rule(b"approve_token_transfer_sanity");
+    // Needs optimistic loop mode due to loop in limiter::adjust_transfer_records
     rule(b"claim_token_sanity");
     rule(b"claim_and_transfer_token_sanity");
+    // Needs optimistic loop mode due to loop in committee::verify_signatures:
+    rule(b"execute_system_message_sanity");
 }
 
 // #[rule]
@@ -98,5 +101,15 @@ fun claim_and_transfer_token_sanity(
     ctx: &mut TxContext,
 ) {
     bridge.claim_and_transfer_token<ETH>(clock, source_chain, bridge_seq_num, ctx);
+    cvlm_assert!(false);
+}
+
+// #[rule]
+fun execute_system_message_sanity(
+    bridge: &mut Bridge,
+    message: BridgeMessage,
+    signatures: vector<vector<u8>>,
+) {
+    bridge.execute_system_message(message, signatures);
     cvlm_assert!(false);
 }
