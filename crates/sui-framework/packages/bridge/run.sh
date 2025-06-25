@@ -1,3 +1,3 @@
 set -e
 sui move build --test
-java -Dlevel.setup.helpers=warn -jar $CERTORA/emv.jar -treeViewReportUpdateInterval 0 -movePath build -b 2 -assumeUnwindCond
+java -Dverbose.setup.helpers -jar $CERTORA/emv.jar -treeViewReportUpdateInterval 0 -movePath build -b 2 -assumeUnwindCond
