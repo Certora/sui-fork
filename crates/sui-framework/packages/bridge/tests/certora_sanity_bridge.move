@@ -16,7 +16,7 @@ use cvlm::manifest::rule;
 public fun cvlm_manifest() {
     rule(b"committee_registration_sanity");
     // Needs optimistic loop mode due to loop in committee::update_node_url:
-    rule(b"update_node_url");
+    rule(b"update_node_url_sanity");
     rule(b"register_foreign_token_sanity");
     rule(b"send_token_sanity");
     // Needs optimistic loop mode due to loop in committee::verify_signatures:
@@ -41,7 +41,7 @@ public fun committee_registration_sanity(
 }
 
 // #[rule]
-public fun update_node_url(bridge: &mut Bridge, new_url: vector<u8>, ctx: &TxContext) {
+public fun update_node_url_sanity(bridge: &mut Bridge, new_url: vector<u8>, ctx: &TxContext) {
     bridge.update_node_url(new_url, ctx);
     cvlm_satisfy!(true);
 }
