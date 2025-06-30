@@ -1,4 +1,4 @@
-
+import "dispatching_BridgeVault.spec";
 
 /*
  * amount == 0 => revert
