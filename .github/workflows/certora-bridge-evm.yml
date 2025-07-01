@@ -5,6 +5,11 @@ on: pull_request
 env:
   FOUNDRY_PROFILE: ci
   CONFIGS: |
+    certora/confs/setup/autoCVL_BridgeCommittee.conf
+    certora/confs/setup/autoCVL_BridgeConfig.conf
+    certora/confs/setup/autoCVL_BridgeLimiter.conf
+    certora/confs/setup/autoCVL_BridgeVault.conf
+    certora/confs/setup/autoCVL_SuiBridge.conf
     certora/confs/setup/sanity_BridgeCommittee.conf
     certora/confs/setup/sanity_BridgeConfig.conf
     certora/confs/setup/sanity_BridgeLimiter.conf
