@@ -1,3 +1,3 @@
 set -e
 sui move build --test
-java -Dverbose.setup.helpers -jar $CERTORA/emv.jar -treeViewReportUpdateInterval 0 -movePath build -b 2 -assumeUnwindCond
+certoraSuiProver.py --move_path build --java_args "-Dverbose.setup.helpers" --optimistic_loop --loop_iter 2 --prover_args "-treeViewReportUpdateInterval 0" #-includeMoveRules claim_and_transfer_token_effects
