@@ -1,6 +1,6 @@
 #[test_only]
 #[allow(unused_function)]
-module bridge::certora_summaries;
+module bridge_rules::certora_summaries;
 
 use cvlm::manifest::{ summary, ghost };
 

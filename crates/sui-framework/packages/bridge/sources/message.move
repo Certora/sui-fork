@@ -656,6 +656,6 @@ public(package) fun make_add_token_on_sui(
 }
 
 #[test_only]
-public(package) fun unpack_message(msg: BridgeMessageKey): (u8, u8, u64) {
+public fun unpack_message(msg: BridgeMessageKey): (u8, u8, u64) {
     (msg.source_chain, msg.message_type, msg.bridge_seq_num)
 }

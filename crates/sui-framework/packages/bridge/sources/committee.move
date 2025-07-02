@@ -317,12 +317,12 @@ fun check_uniqueness_bridge_keys(self: &BridgeCommittee, bridge_pubkey_bytes: ve
 //
 
 #[test_only]
-public(package) fun members(self: &BridgeCommittee): &VecMap<vector<u8>, CommitteeMember> {
+public fun members(self: &BridgeCommittee): &VecMap<vector<u8>, CommitteeMember> {
     &self.members
 }
 
 #[test_only]
-public(package) fun voting_power(member: &CommitteeMember): u64 {
+public fun voting_power(member: &CommitteeMember): u64 {
     member.voting_power
 }
 
@@ -339,7 +339,7 @@ public(package) fun member_registrations(
 }
 
 #[test_only]
-public(package) fun blocklisted(member: &CommitteeMember): bool {
+public fun blocklisted(member: &CommitteeMember): bool {
     member.blocklisted
 }
 

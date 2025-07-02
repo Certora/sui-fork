@@ -1,6 +1,6 @@
 #[test_only]
 #[allow(unused_function)]
-module bridge::certora_sanity_bridge;
+module bridge_rules::certora_sanity_bridge;
 
 use bridge::bridge::Bridge;
 use bridge::message::BridgeMessage;
