@@ -1,6 +1,6 @@
 #[test_only]
 #[allow(unused_function)]
-module bridge_rules::certora_rules_bridge;
+module spec::bridge_rules;
 
 use bridge::bridge::{ 
     Bridge, 

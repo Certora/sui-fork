@@ -1,6 +1,6 @@
 #[test_only]
 #[allow(unused_function)]
-module bridge_rules::certora_rules_committee;
+module spec::committee_rules;
 
 use bridge::committee::BridgeCommittee;
 use bridge::message::BridgeMessage;

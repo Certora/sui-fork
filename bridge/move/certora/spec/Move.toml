@@ -1,5 +1,5 @@
 [package]
-name = "bridge_rules"
+name = "spec"
 edition = "2024.beta"
 
 [dependencies]
@@ -12,7 +12,4 @@ certora_sui_summaries = { git = "https://github.com/Certora/cvl-move-proto.git",
 # certora_sui_summaries = { local = "/home/eric/src/cvl-move-proto/certora_sui_summaries" }
 
 [addresses]
-bridge_rules = "0x0"
-cvlm = "0x436572746f7261"
-bridge = "0xb"
-
+spec = "0x0"
