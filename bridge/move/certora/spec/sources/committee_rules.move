@@ -1,5 +1,4 @@
 #[test_only]
-#[allow(unused_function)]
 module spec::committee_rules;
 
 use bridge::committee::BridgeCommittee;

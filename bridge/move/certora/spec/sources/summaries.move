@@ -1,5 +1,4 @@
 #[test_only]
-#[allow(unused_function)]
 module spec::summaries;
 
 use cvlm::manifest::{ summary, ghost };
@@ -10,4 +9,4 @@ public fun cvlm_manifest() {
 }
 
 // #[summary(bridge::message::peel_u64_be), ghost]
-native fun peel_u64_be(_: &mut sui::bcs::BCS): u64;
+public native fun peel_u64_be(_: &mut sui::bcs::BCS): u64;

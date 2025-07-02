@@ -1,5 +1,4 @@
 #[test_only]
-#[allow(unused_function)]
 module spec::bridge_sanity;
 
 use bridge::bridge::Bridge;
@@ -47,7 +46,7 @@ public fun update_node_url_sanity(bridge: &mut Bridge, new_url: vector<u8>, ctx:
 }
 
 // #[rule]
-fun register_foreign_token_sanity(
+public fun register_foreign_token_sanity(
     bridge: &mut Bridge,
     tc: TreasuryCap<ETH>,
     uc: UpgradeCap,
@@ -58,7 +57,7 @@ fun register_foreign_token_sanity(
 }
 
 // #[rule]
-fun send_token_sanity(
+public fun send_token_sanity(
     bridge: &mut Bridge,
     target_chain: u8,
     target_address: vector<u8>,
@@ -70,7 +69,7 @@ fun send_token_sanity(
 }
 
 // #[rule]
-fun approve_token_transfer_sanity(
+public fun approve_token_transfer_sanity(
     bridge: &mut Bridge,
     message: BridgeMessage,
     signatures: vector<vector<u8>>,
@@ -80,7 +79,7 @@ fun approve_token_transfer_sanity(
 }
 
 // #[rule]
-fun claim_token_sanity(
+public fun claim_token_sanity(
     bridge: &mut Bridge,
     clock: &Clock,
     source_chain: u8,
@@ -93,7 +92,7 @@ fun claim_token_sanity(
 }
 
 // #[rule]
-fun claim_and_transfer_token_sanity(
+public fun claim_and_transfer_token_sanity(
     bridge: &mut Bridge,
     clock: &Clock,
     source_chain: u8,
@@ -105,7 +104,7 @@ fun claim_and_transfer_token_sanity(
 }
 
 // #[rule]
-fun execute_system_message_sanity(
+public fun execute_system_message_sanity(
     bridge: &mut Bridge,
     message: BridgeMessage,
     signatures: vector<vector<u8>>,

@@ -1,5 +1,4 @@
 #[test_only]
-#[allow(unused_function)]
 module spec::bridge_rules;
 
 use bridge::bridge::{ 
@@ -66,7 +65,7 @@ public fun send_token_effects(
 }
 
 // #[rule]
-fun approve_token_transfer_effects(
+public fun approve_token_transfer_effects(
     bridge: &mut Bridge,
     message: BridgeMessage,
     signatures: vector<vector<u8>>,
@@ -95,7 +94,7 @@ fun approve_token_transfer_effects(
 }
 
 // #[rule]
-fun claim_token_effects(
+public fun claim_token_effects(
     bridge: &mut Bridge,
     clock: &Clock,
     source_chain: u8,
@@ -137,7 +136,7 @@ fun claim_token_effects(
 }
 
 // #[rule]
-fun claim_and_transfer_token_effects(
+public fun claim_and_transfer_token_effects(
     bridge: &mut Bridge,
     clock: &Clock,
     source_chain: u8,
