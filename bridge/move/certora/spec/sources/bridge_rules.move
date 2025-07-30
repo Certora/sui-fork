@@ -19,7 +19,7 @@ use sui::coin::{ Coin, value };
 use sui::event::events_by_type;
 use sui::clock::Clock;
 
-use cvlm::asserts::{ cvlm_assert, cvlm_assume };
+use cvlm::asserts::{ cvlm_assert, cvlm_assume_msg };
 use cvlm::manifest::rule;
 
 public fun cvlm_manifest() {
@@ -37,7 +37,7 @@ public fun send_token_effects(
     coin: Coin<ETH>,
     ctx: &mut TxContext,    
 ) {
-    cvlm_assume!(events_by_type<TokenDepositedEvent>().length() == 0);
+    cvlm_assume_msg!(events_by_type<TokenDepositedEvent>().length() == 0, b"start with zero TokenDepositedEvent");
 
     let coin_value = coin.value();
     let total_supply_before = get_total_supply<ETH>(bridge);
@@ -70,8 +70,8 @@ public fun approve_token_transfer_effects(
     message: BridgeMessage,
     signatures: vector<vector<u8>>,
 ) {
-    cvlm_assume!(events_by_type<TokenTransferApproved>().length() == 0);
-    cvlm_assume!(events_by_type<TokenTransferAlreadyApproved>().length() == 0);
+    cvlm_assume_msg!(events_by_type<TokenTransferApproved>().length() == 0, b"start with zero TokenTransferApproved");
+    cvlm_assume_msg!(events_by_type<TokenTransferAlreadyApproved>().length() == 0, b"start with zero TokenTransferAlreadyApproved");
 
     bridge.approve_token_transfer(message, signatures);
 
@@ -101,9 +101,9 @@ public fun claim_token_effects(
     bridge_seq_num: u64,
     ctx: &mut TxContext,
 ): Coin<ETH> {
-    cvlm_assume!(events_by_type<TokenTransferClaimed>().length() == 0);
-    cvlm_assume!(events_by_type<TokenTransferAlreadyClaimed>().length() == 0);
-    cvlm_assume!(events_by_type<TokenTransferLimitExceed>().length() == 0);
+    cvlm_assume_msg!(events_by_type<TokenTransferClaimed>().length() == 0, b"start with zero TokenTransferClaimed");
+    cvlm_assume_msg!(events_by_type<TokenTransferAlreadyClaimed>().length() == 0, b"start with zero TokenTransferAlreadyClaimed");
+    cvlm_assume_msg!(events_by_type<TokenTransferLimitExceed>().length() == 0, b"start with zero TokenTransferLimitExceed");
 
     let total_supply_before = get_total_supply<ETH>(bridge);
 
@@ -143,10 +143,10 @@ public fun claim_and_transfer_token_effects(
     bridge_seq_num: u64,
     ctx: &mut TxContext,
 ) {
-    cvlm_assume!(events_by_type<TokenTransferClaimed>().length() == 0);
-    cvlm_assume!(events_by_type<TokenTransferAlreadyClaimed>().length() == 0);
-    cvlm_assume!(events_by_type<TokenTransferLimitExceed>().length() == 0);
-    cvlm_assume!(certora::sui_transfer_summaries::transfers<Coin<ETH>>().length() == 0);
+    cvlm_assume_msg!(events_by_type<TokenTransferClaimed>().length() == 0, b"start with zero TokenTransferClaimed");
+    cvlm_assume_msg!(events_by_type<TokenTransferAlreadyClaimed>().length() == 0, b"start with zero TokenTransferAlreadyClaimed");
+    cvlm_assume_msg!(events_by_type<TokenTransferLimitExceed>().length() == 0, b"start with zero TokenTransferLimitExceed");
+    cvlm_assume_msg!(certora::sui_transfer_summaries::transfers<Coin<ETH>>().length() == 0, b"start with zero Sui transfers");
 
     let total_supply_before = get_total_supply<ETH>(bridge);
 
