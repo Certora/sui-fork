@@ -33,11 +33,11 @@ public fun verified_signatures_success_conditions(
     let mut total_voting_power = 0;
     signatures.do_ref!(|sig| { 
         let member_key = get_pubkey_from_signature(message, sig);
-        cvlm_assert!(committee.members().contains(&member_key));
+        cvlm_assert(committee.members().contains(&member_key));
         let member = committee.members().get(&member_key);
         if (!member.blocklisted()) {
             total_voting_power = total_voting_power + member.voting_power();
         }
     });
-    cvlm_assert!(total_voting_power >= message.required_voting_power());
+    cvlm_assert(total_voting_power >= message.required_voting_power());
 }

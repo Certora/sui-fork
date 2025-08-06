@@ -37,7 +37,7 @@ public fun send_token_effects(
     coin: Coin<ETH>,
     ctx: &mut TxContext,    
 ) {
-    cvlm_assume_msg!(events_by_type<TokenDepositedEvent>().length() == 0, b"start with zero TokenDepositedEvent");
+    cvlm_assume_msg(events_by_type<TokenDepositedEvent>().length() == 0, b"start with zero TokenDepositedEvent");
 
     let coin_value = coin.value();
     let total_supply_before = get_total_supply<ETH>(bridge);
@@ -46,11 +46,11 @@ public fun send_token_effects(
     bridge.send_token(target_chain, target_address, coin, ctx);
 
     // verify reduction in total supply
-    cvlm_assert!(total_supply_before - coin_value == get_total_supply<ETH>(bridge));
+    cvlm_assert(total_supply_before - coin_value == get_total_supply<ETH>(bridge));
 
     // verify send event
     let deposited_events = events_by_type<TokenDepositedEvent>();
-    cvlm_assert!(deposited_events.length() == 1);
+    cvlm_assert(deposited_events.length() == 1);
     let (
         event_seq_num,
         _event_source_chain,
@@ -60,8 +60,8 @@ public fun send_token_effects(
         _event_token_type,
         event_amount,
     ) = deposited_events[0].unwrap_deposited_event();
-    cvlm_assert!(event_seq_num == seq_num);
-    cvlm_assert!(event_amount == coin_value);
+    cvlm_assert(event_seq_num == seq_num);
+    cvlm_assert(event_amount == coin_value);
 }
 
 // #[rule]
@@ -70,8 +70,8 @@ public fun approve_token_transfer_effects(
     message: BridgeMessage,
     signatures: vector<vector<u8>>,
 ) {
-    cvlm_assume_msg!(events_by_type<TokenTransferApproved>().length() == 0, b"start with zero TokenTransferApproved");
-    cvlm_assume_msg!(events_by_type<TokenTransferAlreadyApproved>().length() == 0, b"start with zero TokenTransferAlreadyApproved");
+    cvlm_assume_msg(events_by_type<TokenTransferApproved>().length() == 0, b"start with zero TokenTransferApproved");
+    cvlm_assume_msg(events_by_type<TokenTransferAlreadyApproved>().length() == 0, b"start with zero TokenTransferAlreadyApproved");
 
     bridge.approve_token_transfer(message, signatures);
 
@@ -79,7 +79,7 @@ public fun approve_token_transfer_effects(
     let approved_events = events_by_type<TokenTransferApproved>();
     let already_approved_events = events_by_type<TokenTransferAlreadyApproved>();
 
-    cvlm_assert!(approved_events.length() + already_approved_events.length() == 1);
+    cvlm_assert(approved_events.length() + already_approved_events.length() == 1);
 
     let key = if (approved_events.length() == 1) {
         approved_events[0].transfer_approve_key()
@@ -89,8 +89,8 @@ public fun approve_token_transfer_effects(
 
     let (_sc, mt, sn) = key.unpack_message();
 
-    cvlm_assert!(mt == message_types::token());
-    cvlm_assert!(sn == message.seq_num());
+    cvlm_assert(mt == message_types::token());
+    cvlm_assert(sn == message.seq_num());
 }
 
 // #[rule]
@@ -101,22 +101,22 @@ public fun claim_token_effects(
     bridge_seq_num: u64,
     ctx: &mut TxContext,
 ): Coin<ETH> {
-    cvlm_assume_msg!(events_by_type<TokenTransferClaimed>().length() == 0, b"start with zero TokenTransferClaimed");
-    cvlm_assume_msg!(events_by_type<TokenTransferAlreadyClaimed>().length() == 0, b"start with zero TokenTransferAlreadyClaimed");
-    cvlm_assume_msg!(events_by_type<TokenTransferLimitExceed>().length() == 0, b"start with zero TokenTransferLimitExceed");
+    cvlm_assume_msg(events_by_type<TokenTransferClaimed>().length() == 0, b"start with zero TokenTransferClaimed");
+    cvlm_assume_msg(events_by_type<TokenTransferAlreadyClaimed>().length() == 0, b"start with zero TokenTransferAlreadyClaimed");
+    cvlm_assume_msg(events_by_type<TokenTransferLimitExceed>().length() == 0, b"start with zero TokenTransferLimitExceed");
 
     let total_supply_before = get_total_supply<ETH>(bridge);
 
     let token = bridge.claim_token<ETH>(clock, source_chain, bridge_seq_num, ctx);
 
     let token_value = token.value();
-    cvlm_assert!(total_supply_before + token_value == get_total_supply<ETH>(bridge));
+    cvlm_assert(total_supply_before + token_value == get_total_supply<ETH>(bridge));
 
     let claimed = events_by_type<TokenTransferClaimed>();
     let already_claimed = events_by_type<TokenTransferAlreadyClaimed>();
     let limit_exceeded = events_by_type<TokenTransferLimitExceed>();
 
-    cvlm_assert!(claimed.length() + already_claimed.length() + limit_exceeded.length() == 1);
+    cvlm_assert(claimed.length() + already_claimed.length() + limit_exceeded.length() == 1);
 
     let key = if (claimed.length() == 1) {
         claimed[0].transfer_claimed_key()
@@ -128,9 +128,9 @@ public fun claim_token_effects(
 
     let (sc, mt, sn) = key.unpack_message();
 
-    cvlm_assert!(source_chain == sc);
-    cvlm_assert!(mt == message_types::token());
-    cvlm_assert!(sn == bridge_seq_num);
+    cvlm_assert(source_chain == sc);
+    cvlm_assert(mt == message_types::token());
+    cvlm_assert(sn == bridge_seq_num);
 
     token
 }
@@ -143,10 +143,10 @@ public fun claim_and_transfer_token_effects(
     bridge_seq_num: u64,
     ctx: &mut TxContext,
 ) {
-    cvlm_assume_msg!(events_by_type<TokenTransferClaimed>().length() == 0, b"start with zero TokenTransferClaimed");
-    cvlm_assume_msg!(events_by_type<TokenTransferAlreadyClaimed>().length() == 0, b"start with zero TokenTransferAlreadyClaimed");
-    cvlm_assume_msg!(events_by_type<TokenTransferLimitExceed>().length() == 0, b"start with zero TokenTransferLimitExceed");
-    cvlm_assume_msg!(certora::sui_transfer_summaries::transfers<Coin<ETH>>().length() == 0, b"start with zero Sui transfers");
+    cvlm_assume_msg(events_by_type<TokenTransferClaimed>().length() == 0, b"start with zero TokenTransferClaimed");
+    cvlm_assume_msg(events_by_type<TokenTransferAlreadyClaimed>().length() == 0, b"start with zero TokenTransferAlreadyClaimed");
+    cvlm_assume_msg(events_by_type<TokenTransferLimitExceed>().length() == 0, b"start with zero TokenTransferLimitExceed");
+    cvlm_assume_msg(certora::sui_transfer_summaries::transfers<Coin<ETH>>().length() == 0, b"start with zero Sui transfers");
 
     let total_supply_before = get_total_supply<ETH>(bridge);
 
@@ -156,7 +156,7 @@ public fun claim_and_transfer_token_effects(
     let already_claimed = events_by_type<TokenTransferAlreadyClaimed>();
     let limit_exceeded = events_by_type<TokenTransferLimitExceed>();
 
-    cvlm_assert!(claimed.length() + already_claimed.length() + limit_exceeded.length() == 1);
+    cvlm_assert(claimed.length() + already_claimed.length() + limit_exceeded.length() == 1);
 
     let key = if (claimed.length() == 1) {
         claimed[0].transfer_claimed_key()
@@ -168,9 +168,9 @@ public fun claim_and_transfer_token_effects(
 
     let (sc, mt, sn) = key.unpack_message();
 
-    cvlm_assert!(source_chain == sc);
-    cvlm_assert!(mt == message_types::token());
-    cvlm_assert!(sn == bridge_seq_num);
+    cvlm_assert(source_chain == sc);
+    cvlm_assert(mt == message_types::token());
+    cvlm_assert(sn == bridge_seq_num);
 
     let total_supply_after = get_total_supply<ETH>(bridge);
 
@@ -179,5 +179,5 @@ public fun claim_and_transfer_token_effects(
     transfers.do_ref!(|transfer| {
         total_value_transferred = total_value_transferred + transfer.value().value();
     });
-    cvlm_assert!(total_supply_after == total_supply_before + total_value_transferred);
+    cvlm_assert(total_supply_after == total_supply_before + total_value_transferred);
 }

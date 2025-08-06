@@ -36,13 +36,13 @@ public fun committee_registration_sanity(
     ctx: &TxContext,
 ) {
     bridge.committee_registration(system_state, bridge_pubkey_bytes, http_rest_url, ctx);
-    cvlm_satisfy!(true);
+    cvlm_satisfy(true);
 }
 
 // #[rule]
 public fun update_node_url_sanity(bridge: &mut Bridge, new_url: vector<u8>, ctx: &TxContext) {
     bridge.update_node_url(new_url, ctx);
-    cvlm_satisfy!(true);
+    cvlm_satisfy(true);
 }
 
 // #[rule]
@@ -53,7 +53,7 @@ public fun register_foreign_token_sanity(
     metadata: &CoinMetadata<ETH>,
 ) {
     bridge.register_foreign_token<ETH>(tc, uc, metadata);
-    cvlm_satisfy!(true);
+    cvlm_satisfy(true);
 }
 
 // #[rule]
@@ -65,7 +65,7 @@ public fun send_token_sanity(
     ctx: &mut TxContext,
 ) {
     bridge.send_token(target_chain, target_address, token, ctx);
-    cvlm_satisfy!(true);
+    cvlm_satisfy(true);
 }
 
 // #[rule]
@@ -75,7 +75,7 @@ public fun approve_token_transfer_sanity(
     signatures: vector<vector<u8>>,
 ) {
     bridge.approve_token_transfer(message, signatures);
-    cvlm_satisfy!(true);
+    cvlm_satisfy(true);
 }
 
 // #[rule]
@@ -87,7 +87,7 @@ public fun claim_token_sanity(
     ctx: &mut TxContext,
 ): Coin<ETH> {
     let result = bridge.claim_token<ETH>(clock, source_chain, bridge_seq_num, ctx);
-    cvlm_satisfy!(true);
+    cvlm_satisfy(true);
     result
 }
 
@@ -100,7 +100,7 @@ public fun claim_and_transfer_token_sanity(
     ctx: &mut TxContext,
 ) {
     bridge.claim_and_transfer_token<ETH>(clock, source_chain, bridge_seq_num, ctx);
-    cvlm_satisfy!(true);
+    cvlm_satisfy(true);
 }
 
 // #[rule]
@@ -110,5 +110,5 @@ public fun execute_system_message_sanity(
     signatures: vector<vector<u8>>,
 ) {
     bridge.execute_system_message(message, signatures);
-    cvlm_satisfy!(true);
+    cvlm_satisfy(true);
 }
