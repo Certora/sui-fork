@@ -22,9 +22,10 @@ use cvlm::ghost::{ghost_destroy, };
 use cvlm::manifest::rule;
 use sui::address;
 use sui::clock::Clock;
-use sui::coin::{Coin, value};
+use sui::coin::{Coin, value, CoinMetadata};
 use sui::event::events_by_type;
 use cvlm::nondet::nondet;
+use sui_system::sui_system::SuiSystemState;
 
 
 
@@ -71,36 +72,40 @@ fun log<T>(_obj: &T) {}
 //   execute_system_message { message: BridgeMessage, signatures: vector<vector<u8>> },
 // }
 
-// fun call<T>(fn:  BridgeFun<T>, bridge: &mut Bridge, ctx: &mut TxContext) {
-//   match (fn) {
-//     BridgeFun::committee_registration { mut system_state, bridge_pubkey_bytes, http_rest_url } => {
-//       bridge.committee_registration(&mut system_state, bridge_pubkey_bytes, http_rest_url, ctx);
-//       ghost_destroy(system_state);
-//     },
-//     BridgeFun::register_foreign_token { tc, uc, metadata } => {
-//       bridge.register_foreign_token(tc, uc, &metadata);
-//       ghost_destroy(metadata);
-//     },
-//     BridgeFun::send_token { target_chain, target_address, token } => {
-//       bridge.send_token(target_chain, target_address, token, ctx);
-//     },
-//     BridgeFun::approve_token_transfer { message, signatures } => {
-//       bridge.approve_token_transfer(message, signatures);
-//     },
-//     BridgeFun::claim_token { clock, source_chain, bridge_seq_num } => {
-//       let c: Coin<T> = bridge.claim_token(&clock, source_chain, bridge_seq_num, ctx);
-//       ghost_destroy(c);
-//       ghost_destroy(clock);
-//     },
-//     BridgeFun::claim_and_transfer_token { clock, source_chain, bridge_seq_num } => {
-//       bridge.claim_and_transfer_token<T>(&clock, source_chain, bridge_seq_num, ctx);
-//       ghost_destroy(clock);
-//     },
-//     BridgeFun::execute_system_message { message, signatures } => {
-//         bridge.execute_system_message(message, signatures);
-//     },
-//   }
-// }
+fun call<T>(fn: vector<u8>, bridge: &mut Bridge, clock: &Clock,ctx: &mut TxContext) {
+  match (fn) {
+    b"committee_registration" => {
+      let mut system_state = nondet<SuiSystemState>();
+      bridge.committee_registration(&mut system_state, nondet(), nondet(), ctx);
+      ghost_destroy(system_state);
+    },
+    b"register_foreign_token" => {
+      let coin_metadata = nondet<CoinMetadata<T>>();
+      bridge.register_foreign_token<T>(nondet(), nondet(), &coin_metadata);
+      ghost_destroy(coin_metadata);
+    },
+    b"send_token" => {
+      bridge.send_token<T>(nondet(), nondet(), nondet(), ctx);
+    },
+    b"approve_token_transfer" => {
+      bridge.approve_token_transfer(nondet(), nondet());
+    },
+    b"claim_token" => {
+      let coin = bridge.claim_token<T>(clock, nondet(), nondet(), ctx);
+      ghost_destroy(coin);
+    },
+    b"claim_and_transfer_token" => {
+      bridge.claim_and_transfer_token<T>(clock, nondet(), nondet(), ctx);
+    },
+    b"execute_system_message" => {
+      bridge.execute_system_message(nondet(), nondet());
+    },
+    fn => {
+      let _ = fn;
+      assert!(false);
+    }
+  }
+}
 
 /* ----- */
 
@@ -123,18 +128,19 @@ public fun send_token_burns_coin(
 /// If coins/tokens are minted, then either because "claim_token" or "claim_and_transfer_token" has been called
 public fun only_claiming_mints_tokens(
   bridge: &mut Bridge,
-  //fn: BridgeFun<ETH>,
-  _ctx: &mut TxContext,
+  fn: vector<u8>,
+  clock: &Clock,
+  ctx: &mut TxContext,
 ) {
 
   let balance_pre = get_total_supply<ETH>(bridge);
 
-  //fn.call(bridge, ctx);
+  call<ETH>(fn, bridge, clock, ctx);
 
   let balance_post = get_total_supply<ETH>(bridge);
 
   if (balance_pre < balance_post) {
-    //cvlm_assert(fn.name() == b"claim_token" || fn.name() == b"claim_and_transfer_token")
+    cvlm_assert(fn == b"claim_token" || fn == b"claim_and_transfer_token")
   }
 }
 

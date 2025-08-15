@@ -6,8 +6,8 @@ edition = "2024.beta"
 MoveStdlib = { local = "../../../../crates/sui-framework/packages/move-stdlib", override = true }
 Sui = { local = "../../../../crates/sui-framework/packages/sui-framework", override = true }
 Bridge = { local = "../../../../crates/sui-framework/packages/bridge" }
-cvlm = { git = "https://github.com/Certora/cvl-move-proto.git", subdir = "cvlm", rev = "main" }
-certora_sui_summaries = { git = "https://github.com/Certora/cvl-move-proto.git", subdir = "certora_sui_summaries",  rev = "main" }
+cvlm = { git = "https://github.com/Certora/cvl-move-proto.git", subdir = "cvlm", rev = "kel/deletions" }
+certora_sui_summaries = { git = "https://github.com/Certora/cvl-move-proto.git", subdir = "certora_sui_summaries",  rev = "kel/deletions" }
 # cvlm = { local = "/home/eric/src/cvl-move-proto/cvlm" }
 # certora_sui_summaries = { local = "/home/eric/src/cvl-move-proto/certora_sui_summaries" }
 
