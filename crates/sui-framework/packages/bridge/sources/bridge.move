@@ -902,3 +902,25 @@ public fun unwrap_deposited_event(
 public fun unwrap_emergency_op_event(event: EmergencyOpEvent): bool {
     event.frozen
 }
+
+
+#[test_only] 
+public fun verified_signatures(rec: &BridgeRecord): &Option<vector<vector<u8>>> {
+    &rec.verified_signatures
+}
+
+
+#[test_only]
+public fun message(rec: &BridgeRecord): &BridgeMessage {
+    &rec.message
+}
+
+#[test_only]
+public fun chain_id(inner: &BridgeInner): u8 {
+    inner.chain_id
+}
+
+#[test_only]
+public fun inner_committee(inner: &BridgeInner): &BridgeCommittee {
+    &inner.committee
+}
