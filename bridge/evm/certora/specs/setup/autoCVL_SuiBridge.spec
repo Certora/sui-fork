@@ -4,6 +4,8 @@ import "snippet_BridgeUtils.spec";
 import "snippet_loopSummaries.spec";
 import "snippet_uups.spec";
 
+using BridgeUtils as BridgeUtils;
+
 /*
  * _committee == address(0) || _vault == address(0) || _limiter == address(0) => revert
  *
@@ -1060,9 +1062,6 @@ rule bridgeETH_vault_receives_exact_eth_38(env e) {
     // verify integrity
     assert (((((e.msg.value > 0) && (recipientAddress_length_before == 32)) && committee_config_e__isChainSupported_e__destinationChainID__before) && !(paused_e__before)) => (vault_before_balance_after == vault_before_balance_before + e.msg.value));
 }
-
-
-using BridgeUtils as BridgeUtils;
 
 /*
  * _committee == address(0) || _vault == address(0) || _limiter == address(0) => revert

@@ -2,6 +2,8 @@ import "dispatching_BridgeConfig.spec";
 import "setup_BridgeConfig.spec";
 import "snippet_uups.spec";
 
+using BridgeUtils as BridgeUtils;
+
 /*
  * _supportedTokens.length == 0 || _tokenPrices.length == 0 || _tokenIds.length == 0 || _suiDecimals.length == 0 || _supportedChains.length == 0 => revert
  *
@@ -661,8 +663,6 @@ rule addTokensWithSignatures_chainID_unchanged_22(env e) {
     // verify integrity
     assert (chainID_after == chainID_before);
 }
-
-using BridgeUtils as BridgeUtils;
 
 /*
  * _committee == address(0) => revert

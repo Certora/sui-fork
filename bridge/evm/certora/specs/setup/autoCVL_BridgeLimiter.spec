@@ -3,6 +3,8 @@ import "setup_BridgeConfig.spec";
 import "snippet_loopSummaries.spec";
 import "snippet_uups.spec";
 
+using BridgeUtils as BridgeUtils;
+
 /*
  * chainIDs.length == 0 || _totalLimits.length == 0 => revert
  *
@@ -1404,9 +1406,6 @@ rule updateLimitWithSignatures_97c39b13_committee_unchanged(env e) {
     // verify integrity
     assert (currentContract_committee_after == currentContract_committee_before), "committee@after == committee@before";
 }
-
-
-using BridgeUtils as BridgeUtils;
 
 /*
  * chainIDs.length == 0 => revert
