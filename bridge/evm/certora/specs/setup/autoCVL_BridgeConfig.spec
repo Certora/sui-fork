@@ -2,7 +2,7 @@ import "dispatching_BridgeConfig.spec";
 import "setup_BridgeConfig.spec";
 import "snippet_uups.spec";
 
-using BridgeUtils as BridgeUtils;
+using BridgeUtilsHarness as BridgeUtils;
 
 /*
  * _supportedTokens.length == 0 || _tokenPrices.length == 0 || _tokenIds.length == 0 || _suiDecimals.length == 0 || _supportedChains.length == 0 => revert

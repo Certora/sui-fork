@@ -4,7 +4,7 @@ import "snippet_BridgeUtils.spec";
 import "snippet_loopSummaries.spec";
 import "snippet_uups.spec";
 
-using BridgeUtils as BridgeUtils;
+using BridgeUtilsHarness as BridgeUtils;
 
 /*
  * _committee == address(0) || _vault == address(0) || _limiter == address(0) => revert

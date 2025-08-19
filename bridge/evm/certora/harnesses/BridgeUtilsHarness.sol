@@ -7,4 +7,9 @@ contract BridgeUtilsHarness {
     uint8 public constant ETH = BridgeUtils.ETH;
     uint8 public constant USDC = BridgeUtils.USDC;
     uint8 public constant USDT = BridgeUtils.USDT;
+
+    uint8 public constant EMERGENCY_OP = BridgeUtils.EMERGENCY_OP;
+    uint8 public constant UPDATE_BRIDGE_LIMIT = BridgeUtils.UPDATE_BRIDGE_LIMIT;
+    uint8 public constant UPDATE_TOKEN_PRICE = BridgeUtils.UPDATE_TOKEN_PRICE;
+    uint8 public constant ADD_EVM_TOKENS = BridgeUtils.ADD_EVM_TOKENS;
 }
