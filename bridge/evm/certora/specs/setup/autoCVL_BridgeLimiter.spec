@@ -821,7 +821,7 @@ rule recordBridgeTransfers_9373d391_exceeds_limit_reverts(env e) {
     // assign all the 'after' variables
 
     // verify integrity
-    assert (willAmountExceedLimit_e__chainID__tokenID__amount__before => recordBridgeTransfers_reverted), "willAmountExceedLimit(chainID, tokenID, amount)@before => revert";
+    assert (willUSDAmountExceedLimit_e__chainID__tokenID__amount__before => recordBridgeTransfers_reverted), "willAmountExceedLimit(chainID, tokenID, amount)@before => revert";
 }
 
 /*
