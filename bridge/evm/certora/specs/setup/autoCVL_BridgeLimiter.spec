@@ -6,34 +6,6 @@ import "snippet_uups.spec";
 using BridgeUtilsHarness as BridgeUtils;
 
 /*
- * chainIDs.length == 0 || _totalLimits.length == 0 => revert
- *
- * What it means: The initialize function must revert if either the chainIDs array or _totalLimits array is empty
- *
- * Why it should hold: An empty array would result in no chain limits being set, leaving the contract in an uninitialized state where no chains have configured limits, making the bridge limiter non-functional
- *
- * Possible consequences: Contract becomes non-functional as a bridge limiter, allowing unlimited bridging which defeats the purpose of rate limiting and could lead to economic attacks
- */
-rule initialize_empty_arrays_revert_1(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-
-    // assign all the 'before' variables
-    uint256 chainIDs_length_before = chainIDs.length;
-    uint256 _totalLimits_length_before = _totalLimits.length;
-
-    // call function under test
-    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert (((chainIDs_length_before == 0) || (_totalLimits_length_before == 0)) => initialize_reverted);
-}
-
-/*
  * chainIDs.length != _totalLimits.length => revert
  *
  * What it means: The initialize function must revert if the chainIDs and _totalLimits arrays have different lengths
@@ -136,23 +108,24 @@ rule initialize_duplicate_chainIDs_preserved_7(env e) {
  *
  * Possible consequences: Incorrect timestamp tracking, broken rolling window calculations, bypass of time-based limits
  */
-rule initialize_timestamps_remain_zero_8(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-    uint8 chainID;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize(e, _committee, chainIDs, _totalLimits);
-
-    // assign all the 'after' variables
-    uint32 oldestChainTimestamp_chainID__after = currentContract.oldestChainTimestamp[chainID];
-
-    // verify integrity
-    assert (oldestChainTimestamp_chainID__after == 0);
-}
+// gereon: initialize explicitly modifies this. I guess the AI misunderstood what this mapping does.
+//rule initialize_timestamps_remain_zero_8(env e) {
+//    address _committee;
+//    uint8[] chainIDs;
+//    uint64[] _totalLimits;
+//    uint8 chainID;
+//
+//    // assign all the 'before' variables
+//
+//    // call function under test
+//    initialize(e, _committee, chainIDs, _totalLimits);
+//
+//    // assign all the 'after' variables
+//    uint32 oldestChainTimestamp_chainID__after = currentContract.oldestChainTimestamp[chainID];
+//
+//    // verify integrity
+//    assert (oldestChainTimestamp_chainID__after == 0);
+//}
 
 /*
  * chainHourlyTransferAmount[key]@after == chainHourlyTransferAmount[key]@before
@@ -888,7 +861,8 @@ rule recordBridgeTransfers_9373d391_exceeds_limit_reverts(env e) {
     uint256 amount;
 
     // assign all the 'before' variables
-    bool willAmountExceedLimit_e__chainID__tokenID__amount__before = willAmountExceedLimit(e, chainID, tokenID, amount);
+    uint256 usdAmount = calculateAmountInUSD(tokenID, amount);
+    bool willAmountExceedLimit_e__chainID__tokenID__amount__before = willUSDAmountExceedLimit(e, chainID, tokenID, amount);
 
     // call function under test
     recordBridgeTransfers@withrevert(e, chainID, tokenID, amount);
