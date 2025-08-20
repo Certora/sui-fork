@@ -1148,8 +1148,6 @@ rule updateLimitWithSignatures_97c39b13_other_chain_limits_unchanged(env e) {
     BridgeUtils.Message message;
     uint8 chainID;
 
-    require(chainID < currentContract.chainLimits.length);
-
     // assign all the 'before' variables
     uint64 chainLimits_before = currentContract.chainLimits[chainID];
 
@@ -1176,21 +1174,19 @@ rule updateLimitWithSignatures_97c39b13_other_chain_limits_unchanged(env e) {
 rule updateLimitWithSignatures_97c39b13_other_chain_nonces_unchanged(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
-    uint8 chainID;
-
-    require(chainID < currentContract.chainLimits.length);
+    uint8 messageType;
 
     // assign all the 'before' variables
-    uint64 currentContract_nonces_chainID__before = currentContract.nonces[message.messageType];
+    uint64 nonces_before = currentContract.nonces[messageType];
 
     // call function under test
     updateLimitWithSignatures(e, signatures, message);
 
     // assign all the 'after' variables
-    uint64 currentContract_nonces_chainID__after = currentContract.nonces[message.messageType];
+    uint64 nonces_after = currentContract.nonces[messageType];
 
     // verify integrity
-    assert ((chainID != message.chainID) => (currentContract_nonces_chainID__after == currentContract_nonces_chainID__before)), "chainID != message.chainID => nonces[chainID]@after == nonces[chainID]@before";
+    assert ((messageType != message.messageType) => (nonces_after == nonces_before)), "chainID != message.chainID => nonces[chainID]@after == nonces[chainID]@before";
 }
 
 /*
