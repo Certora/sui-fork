@@ -88,36 +88,6 @@ rule initialize_committee_set_correctly_4(env e) {
 }
 
 /*
- * chainIDs.length > 0 && i < chainIDs.length => chainLimits[chainIDs[i]]@after == _totalLimits[i]
- *
- * What it means: For each valid index in the arrays, the chain limit for chainIDs[i] must be set to _totalLimits[i]
- *
- * Why it should hold: This is the core functionality of initialization - setting up the rate limits for each supported chain
- *
- * Possible consequences: Incorrect or missing rate limits, chains with wrong limits allowing over/under bridging, economic attacks
- */
-rule initialize_chain_limits_set_6(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-    uint256 i;
-
-    // assign all the 'before' variables
-    uint256 chainIDs_length_before = chainIDs.length;
-    uint8 chainIDs_i__before = chainIDs[i];
-    uint64 _totalLimits_i__before = _totalLimits[i];
-
-    // call function under test
-    initialize(e, _committee, chainIDs, _totalLimits);
-
-    // assign all the 'after' variables
-    uint64 chainLimits_chainIDs_i__before__after = currentContract.chainLimits[chainIDs_i__before];
-
-    // verify integrity
-    assert (((chainIDs_length_before > 0) && (i < chainIDs_length_before)) => (chainLimits_chainIDs_i__before__after == _totalLimits_i__before));
-}
-
-/*
  * i < chainIDs.length && j < chainIDs.length && i != j && chainIDs[i] == chainIDs[j] => chainLimits[chainIDs[i]]@after == _totalLimits[j]
  *
  * What it means: If the same chainID appears multiple times in the array, the last corresponding limit value should be preserved
@@ -139,6 +109,14 @@ rule initialize_duplicate_chainIDs_preserved_7(env e) {
     uint8 chainIDs_j__before = chainIDs[j];
     uint64 _totalLimits_j__before = _totalLimits[j];
 
+    require(i < chainIDs.length);
+    require(j < chainIDs.length);
+    require(i != j);
+    require(chainIDs_i__before == chainIDs_j__before);
+    require(
+        forall uint256 k. (i < k && j < k && k < chainIDs.length) => (chainIDs[i] != chainIDs[k])
+    );
+
     // call function under test
     initialize(e, _committee, chainIDs, _totalLimits);
 
@@ -146,7 +124,7 @@ rule initialize_duplicate_chainIDs_preserved_7(env e) {
     uint64 chainLimits_chainIDs_i__before__after = currentContract.chainLimits[chainIDs_i__before];
 
     // verify integrity
-    assert (((((i < chainIDs_length_before) && (j < chainIDs_length_before)) && (i != j)) && (chainIDs_i__before == chainIDs_j__before)) => (chainLimits_chainIDs_i__before__after == _totalLimits_j__before));
+    assert (((i < chainIDs_length_before) && (j < chainIDs_length_before)) => (chainLimits_chainIDs_i__before__after == _totalLimits_j__before));
 }
 
 /*
@@ -629,7 +607,7 @@ rule initialize_43a5f2bc_mismatched_arrays_revert(env e) {
  * Possible consequences: Contract becomes non-functional as committee-dependent operations will fail. Functions like calculateAmountInUSD and updateLimitWithSignatures would revert when trying to access committee.config().
  */
 // gereon: no such check present. Could make sense, but any other unused address would break it as well.
-rule initialize_43a5f2bc_zero_committee_reverts(env e) {
+rule __initialize_43a5f2bc_zero_committee_reverts(env e) {
     address _committee;
     uint8[] chainIDs;
     uint64[] _totalLimits;
@@ -691,6 +669,7 @@ rule initialize_43a5f2bc_sets_chain_limits(env e) {
     require(
         forall uint256 j. (i < j && j < chainIDs.length) => (chainIDs[j] != chainIDs[i])
     );
+    require(i < chainIDs.length);
 
     // call function under test
     initialize(e, _committee, chainIDs, _totalLimits);
