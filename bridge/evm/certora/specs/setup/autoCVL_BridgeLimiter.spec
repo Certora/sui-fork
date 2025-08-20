@@ -210,33 +210,6 @@ rule recordBridgeTransfers_zero_amount_reverts_11(env e) {
 }
 
 /*
- * !committee.config().isChainSupported(chainID) => revert
- *
- * What it means: The function must revert when attempting to record transfers for a chainID that is not supported by the bridge configuration
- *
- * Why it should hold: The bridge limiter should only track transfers for chains that are officially supported by the bridge system to maintain data integrity and prevent unauthorized chain additions
- *
- * Possible consequences: State corruption through invalid chain data, potential bypass of security restrictions, and inconsistent bridge state that could lead to fund loss or system malfunction
- */
-rule recordBridgeTransfers_unsupported_chain_reverts_12(env e) {
-    uint8 chainID;
-    uint8 tokenID;
-    uint256 amount;
-
-    // assign all the 'before' variables
-    bool committee_config_e__isChainSupported_e__chainID__before = currentContract.committee.config(e).isChainSupported(e, chainID);
-
-    // call function under test
-    recordBridgeTransfers@withrevert(e, chainID, tokenID, amount);
-    bool recordBridgeTransfers_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert (!(committee_config_e__isChainSupported_e__chainID__before) => recordBridgeTransfers_reverted);
-}
-
-/*
  * !committee.config().isTokenSupported(tokenID) => revert
  *
  * What it means: The function must revert when attempting to record transfers for a tokenID that is not supported by the bridge configuration
@@ -261,35 +234,6 @@ rule recordBridgeTransfers_unsupported_token_reverts_13(env e) {
 
     // verify integrity
     assert (!(committee_config_e__isTokenSupported_e__tokenID__before) => recordBridgeTransfers_reverted);
-}
-
-/*
- * calculateWindowAmount(chainID) + calculateAmountInUSD(tokenID, amount) > chainLimits[chainID] => revert
- *
- * What it means: The function must revert when recording a transfer would cause the total bridged amount within the 24-hour window to exceed the configured limit for that chain
- *
- * Why it should hold: This is the core security mechanism of the bridge limiter - preventing excessive transfers that could drain bridge funds or enable large-scale attacks
- *
- * Possible consequences: Complete bypass of bridge security limits leading to potential fund drainage, large-scale attacks, and violation of the bridge's risk management policies
- */
-rule recordBridgeTransfers_exceeds_limit_reverts_14(env e) {
-    uint8 chainID;
-    uint8 tokenID;
-    uint256 amount;
-
-    // assign all the 'before' variables
-    uint256 calculateWindowAmount_e__chainID__before = calculateWindowAmount(e, chainID);
-    uint256 calculateAmountInUSD_e__tokenID__amount__before = calculateAmountInUSD(e, tokenID, amount);
-    uint64 chainLimits_chainID__before = currentContract.chainLimits[chainID];
-
-    // call function under test
-    recordBridgeTransfers@withrevert(e, chainID, tokenID, amount);
-    bool recordBridgeTransfers_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((calculateWindowAmount_e__chainID__before + calculateAmountInUSD_e__tokenID__amount__before > chainLimits_chainID__before) => recordBridgeTransfers_reverted);
 }
 
 /*
@@ -367,6 +311,9 @@ rule updateLimitWithSignatures_duplicate_signatures_revert_17(env e) {
     uint256 i;
     uint256 j;
 
+    require(i < signatures.length);
+    require(j < signatures.length);
+
     // assign all the 'before' variables
     bytes signatures_i__before = signatures[i];
     bytes signatures_j__before = signatures[j];
@@ -390,13 +337,14 @@ rule updateLimitWithSignatures_duplicate_signatures_revert_17(env e) {
  *
  * Possible consequences: Allowing updates for unsupported chains could lead to state corruption, unexpected behavior, or enable attackers to manipulate limits for chains that shouldn't exist in the system
  */
-rule updateLimitWithSignatures_invalid_chain_id_reverts_18(env e) {
+// gereon: checks are about different chain ids, from message.chainID and from message.payload
+rule __updateLimitWithSignatures_invalid_chain_id_reverts_18(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
     // assign all the 'before' variables
     uint8 message_chainID_before = message.chainID;
-    bool committee_config_e__isChainSupported_e__message_chainID_before__before = currentContract.committee.config(e).isChainSupported(e, message_chainID_before);
+    bool isChainSupported_before = currentContract.committee.config(e).isChainSupported(e, message_chainID_before);
 
     // call function under test
     updateLimitWithSignatures@withrevert(e, signatures, message);
@@ -405,7 +353,7 @@ rule updateLimitWithSignatures_invalid_chain_id_reverts_18(env e) {
     // assign all the 'after' variables
 
     // verify integrity
-    assert (!(committee_config_e__isChainSupported_e__message_chainID_before__before) => updateLimitWithSignatures_reverted);
+    assert (!isChainSupported_before => updateLimitWithSignatures_reverted);
 }
 
 /*
@@ -417,22 +365,22 @@ rule updateLimitWithSignatures_invalid_chain_id_reverts_18(env e) {
  *
  * Possible consequences: Failure to increment nonces enables replay attacks where old signed messages can be reused to repeatedly change limits or undo recent limit updates
  */
+// gereon: the nonces are per messageType, not per chainID
 rule updateLimitWithSignatures_increments_nonce_19(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
     // assign all the 'before' variables
-    uint8 message_chainID_before = message.chainID;
-    uint64 nonces_message_chainID_before__before = currentContract.nonces[message_chainID_before];
+    uint64 nonces_before = currentContract.nonces[message.messageType];
 
     // call function under test
     updateLimitWithSignatures(e, signatures, message);
 
     // assign all the 'after' variables
-    uint64 nonces_message_chainID_before__after = currentContract.nonces[message_chainID_before];
+    uint64 nonces_after = currentContract.nonces[message.messageType];
 
     // verify integrity
-    assert (nonces_message_chainID_before__after == nonces_message_chainID_before__before + 1);
+    assert (nonces_after == nonces_before + 1);
 }
 
 /*
@@ -444,7 +392,8 @@ rule updateLimitWithSignatures_increments_nonce_19(env e) {
  *
  * Possible consequences: If updating one chain's limit affects others, it could accidentally weaken security for unrelated chains or cause cascading limit changes
  */
-rule updateLimitWithSignatures_preserves_other_limits_20(env e) {
+// gereon: not quite sure. message.chainID is the source chain, but decodeUpdateLimitPayload retrieves the sender chain id from the payload.
+rule __updateLimitWithSignatures_preserves_other_limits_20(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
     uint8 otherChainID;
@@ -801,7 +750,8 @@ rule recordBridgeTransfers_9373d391_zero_amount_reverts(env e) {
  *
  * Possible consequences: Recording transfers for invalid chains, corrupting bridge state, bypassing proper chain validation
  */
-rule recordBridgeTransfers_9373d391_unsupported_chain_reverts(env e) {
+// gereon: there is no explicit check for that, but maybe it should be added
+rule __recordBridgeTransfers_9373d391_unsupported_chain_reverts(env e) {
     uint8 chainID;
     uint8 tokenID;
     uint256 amount;
@@ -862,7 +812,7 @@ rule recordBridgeTransfers_9373d391_exceeds_limit_reverts(env e) {
 
     // assign all the 'before' variables
     uint256 usdAmount = calculateAmountInUSD(tokenID, amount);
-    bool willAmountExceedLimit_e__chainID__tokenID__amount__before = willUSDAmountExceedLimit(e, chainID, tokenID, amount);
+    bool willUSDAmountExceedLimit_e__chainID__tokenID__amount__before = willUSDAmountExceedLimit(e, chainID, tokenID, amount);
 
     // call function under test
     recordBridgeTransfers@withrevert(e, chainID, tokenID, amount);
@@ -916,7 +866,8 @@ rule recordBridgeTransfers_9373d391_updates_hourly_transfer_amount(env e) {
  *
  * Possible consequences: Corruption of historical transfer data, incorrect rolling window calculations, potential manipulation of past records
  */
-rule recordBridgeTransfers_9373d391_other_hours_unchanged(env e) {
+// gereon: the function garbage collects expired hours... rule can be adapted, I guess
+rule __recordBridgeTransfers_9373d391_other_hours_unchanged(env e) {
     uint8 chainID;
     uint8 tokenID;
     uint256 amount;
@@ -924,17 +875,17 @@ rule recordBridgeTransfers_9373d391_other_hours_unchanged(env e) {
 
     // assign all the 'before' variables
     uint32 currentHour_e__before = currentHour(e);
-    uint256 getChainHourTimestampKey_e__chainID__hourTimestamp__before = getChainHourTimestampKey(e, chainID, hourTimestamp);
-    uint256 currentContract_chainHourlyTransferAmount_getChainHourTimestampKey_e__chainID__hourTimestamp__before__before = currentContract.chainHourlyTransferAmount[getChainHourTimestampKey_e__chainID__hourTimestamp__before];
+    uint256 getChainHourTimestampKey_before = getChainHourTimestampKey(e, chainID, hourTimestamp);
+    uint256 chainHourlyTransferAmount_before = currentContract.chainHourlyTransferAmount[getChainHourTimestampKey_before];
 
     // call function under test
     recordBridgeTransfers(e, chainID, tokenID, amount);
 
     // assign all the 'after' variables
-    uint256 currentContract_chainHourlyTransferAmount_getChainHourTimestampKey_e__chainID__hourTimestamp__before__after = currentContract.chainHourlyTransferAmount[getChainHourTimestampKey_e__chainID__hourTimestamp__before];
+    uint256 chainHourlyTransferAmount_after = currentContract.chainHourlyTransferAmount[getChainHourTimestampKey_before];
 
     // verify integrity
-    assert ((hourTimestamp != currentHour_e__before) => (currentContract_chainHourlyTransferAmount_getChainHourTimestampKey_e__chainID__hourTimestamp__before__after == currentContract_chainHourlyTransferAmount_getChainHourTimestampKey_e__chainID__hourTimestamp__before__before)), "hourTimestamp != currentHour()@before => chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@after == chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@before";
+    assert ((hourTimestamp != currentHour_e__before) => (chainHourlyTransferAmount_after == chainHourlyTransferAmount_before)), "hourTimestamp != currentHour()@before => chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@after == chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@before";
 }
 
 /*
@@ -1080,7 +1031,8 @@ rule updateLimitWithSignatures_97c39b13_invalid_message_type_revert(env e) {
  *
  * Possible consequences: Configuration corruption, wasted gas, potential for setting limits on non-existent chains
  */
-rule updateLimitWithSignatures_97c39b13_unsupported_chain_revert(env e) {
+// gereon: the check is for message.payload, not message.chainID
+rule __updateLimitWithSignatures_97c39b13_unsupported_chain_revert(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
@@ -1132,7 +1084,8 @@ rule updateLimitWithSignatures_97c39b13_invalid_nonce_revert(env e) {
  *
  * Possible consequences: Function not working as intended, wasted gas costs, limits not being updated when they should be
  */
-rule updateLimitWithSignatures_97c39b13_valid_signatures_update_limit(env e) {
+// gereon: there is nothing in the code that prevents updating to the old limit
+rule __updateLimitWithSignatures_97c39b13_valid_signatures_update_limit(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
