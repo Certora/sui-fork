@@ -805,6 +805,7 @@ rule recordBridgeTransfers_9373d391_unsupported_token_reverts(env e) {
  *
  * Possible consequences: Bypassing bridge limits, allowing excessive token transfers, breaking the fundamental security mechanism
  */
+// gereon: $%& AI confused amount and usdAmount
 rule recordBridgeTransfers_9373d391_exceeds_limit_reverts(env e) {
     uint8 chainID;
     uint8 tokenID;
@@ -812,7 +813,7 @@ rule recordBridgeTransfers_9373d391_exceeds_limit_reverts(env e) {
 
     // assign all the 'before' variables
     uint256 usdAmount = calculateAmountInUSD(e, tokenID, amount);
-    bool willUSDAmountExceedLimit_e__chainID__tokenID__amount__before = willUSDAmountExceedLimit(e, chainID, amount);
+    bool willUSDAmountExceedLimit_before = willUSDAmountExceedLimit(e, chainID, usdAmount);
 
     // call function under test
     recordBridgeTransfers@withrevert(e, chainID, tokenID, amount);
@@ -821,7 +822,7 @@ rule recordBridgeTransfers_9373d391_exceeds_limit_reverts(env e) {
     // assign all the 'after' variables
 
     // verify integrity
-    assert (willUSDAmountExceedLimit_e__chainID__tokenID__amount__before => recordBridgeTransfers_reverted), "willAmountExceedLimit(chainID, tokenID, amount)@before => revert";
+    assert (willUSDAmountExceedLimit_before => recordBridgeTransfers_reverted), "willAmountExceedLimit(chainID, tokenID, amount)@before => revert";
 }
 
 /*
@@ -1147,17 +1148,19 @@ rule updateLimitWithSignatures_97c39b13_other_chain_limits_unchanged(env e) {
     BridgeUtils.Message message;
     uint8 chainID;
 
+    require(chainID < chainLimits.length);
+
     // assign all the 'before' variables
-    uint64 currentContract_chainLimits_chainID__before = currentContract.chainLimits[chainID];
+    uint64 chainLimits_before = currentContract.chainLimits[chainID];
 
     // call function under test
     updateLimitWithSignatures(e, signatures, message);
 
     // assign all the 'after' variables
-    uint64 currentContract_chainLimits_chainID__after = currentContract.chainLimits[chainID];
+    uint64 chainLimits_after = currentContract.chainLimits[chainID];
 
     // verify integrity
-    assert ((chainID != message.chainID) => (currentContract_chainLimits_chainID__after == currentContract_chainLimits_chainID__before)), "chainID != message.chainID => chainLimits[chainID]@after == chainLimits[chainID]@before";
+    assert ((chainID != message.chainID) => (chainLimits_after == chainLimits_before)), "chainID != message.chainID => chainLimits[chainID]@after == chainLimits[chainID]@before";
 }
 
 /*
@@ -1175,6 +1178,8 @@ rule updateLimitWithSignatures_97c39b13_other_chain_nonces_unchanged(env e) {
     BridgeUtils.Message message;
     uint8 chainID;
 
+    require(chainID < chainLimits.length);
+    
     // assign all the 'before' variables
     uint64 currentContract_nonces_chainID__before = currentContract.nonces[message.messageType];
 
