@@ -1058,12 +1058,13 @@ rule __updateLimitWithSignatures_97c39b13_unsupported_chain_revert(env e) {
  *
  * Possible consequences: Replay attacks, out-of-order message processing, potential for replaying old limit updates
  */
+// gereon: again the AI misunderstood the nonces. They are per messageType, not chainID
 rule updateLimitWithSignatures_97c39b13_invalid_nonce_revert(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
     // assign all the 'before' variables
-    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.chainID];
+    uint64 nonces_before = currentContract.nonces[message.messageType];
 
     // call function under test
     updateLimitWithSignatures@withrevert(e, signatures, message);
@@ -1072,7 +1073,7 @@ rule updateLimitWithSignatures_97c39b13_invalid_nonce_revert(env e) {
     // assign all the 'after' variables
 
     // verify integrity
-    assert ((message.nonce != currentContract_nonces_message_chainID__before) => updateLimitWithSignatures_reverted), "message.nonce != nonces[message.chainID]@before => revert";
+    assert ((message.nonce != nonces_before) => updateLimitWithSignatures_reverted), "message.nonce != nonces[message.chainID]@before => revert";
 }
 
 /*
@@ -1113,19 +1114,20 @@ rule __updateLimitWithSignatures_97c39b13_valid_signatures_update_limit(env e) {
  *
  * Possible consequences: Replay attacks, message reordering, potential for processing the same limit update multiple times
  */
+// gereon: again the AI misunderstood the nonces. They are per messageType, not chainID
 rule updateLimitWithSignatures_97c39b13_nonce_increments(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
     // assign all the 'before' variables
     bool currentContract_committee_config_e__isChainSupported_e__message_chainID__before = currentContract.committee.config(e).isChainSupported(e, message.chainID);
-    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.chainID];
+    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.messageType];
 
     // call function under test
     updateLimitWithSignatures(e, signatures, message);
 
     // assign all the 'after' variables
-    uint64 currentContract_nonces_message_chainID__after = currentContract.nonces[message.chainID];
+    uint64 currentContract_nonces_message_chainID__after = currentContract.nonces[message.messageType];
 
     // verify integrity
     assert (((((signatures.length > 0) && (message.messageType == BridgeUtils.UPDATE_BRIDGE_LIMIT(e))) && currentContract_committee_config_e__isChainSupported_e__message_chainID__before) && (message.nonce == currentContract_nonces_message_chainID__before)) => (currentContract_nonces_message_chainID__after == currentContract_nonces_message_chainID__before + 1)), "signatures.length > 0 && message.messageType == BridgeUtils.UPDATE_BRIDGE_LIMIT && committee@before.config().isChainSupported(message.chainID) && message.nonce == nonces[message.chainID]@before => nonces[message.chainID]@after == nonces[message.chainID]@before + 1";
@@ -1167,19 +1169,20 @@ rule updateLimitWithSignatures_97c39b13_other_chain_limits_unchanged(env e) {
  *
  * Possible consequences: Nonce desynchronization, replay attack vulnerabilities on other chains, message ordering issues
  */
+// gereon: again the AI misunderstood the nonces. They are per messageType, not chainID
 rule updateLimitWithSignatures_97c39b13_other_chain_nonces_unchanged(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
     uint8 chainID;
 
     // assign all the 'before' variables
-    uint64 currentContract_nonces_chainID__before = currentContract.nonces[chainID];
+    uint64 currentContract_nonces_chainID__before = currentContract.nonces[message.messageType];
 
     // call function under test
     updateLimitWithSignatures(e, signatures, message);
 
     // assign all the 'after' variables
-    uint64 currentContract_nonces_chainID__after = currentContract.nonces[chainID];
+    uint64 currentContract_nonces_chainID__after = currentContract.nonces[message.messageType];
 
     // verify integrity
     assert ((chainID != message.chainID) => (currentContract_nonces_chainID__after == currentContract_nonces_chainID__before)), "chainID != message.chainID => nonces[chainID]@after == nonces[chainID]@before";
