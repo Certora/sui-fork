@@ -1143,7 +1143,8 @@ rule updateLimitWithSignatures_97c39b13_nonce_increments(env e) {
  *
  * Possible consequences: Unintended limit changes on other chains, system-wide security degradation, unexpected bridge behavior
  */
-rule updateLimitWithSignatures_97c39b13_other_chain_limits_unchanged(env e) {
+// gereon: checks are about different chain ids, from message.chainID and from message.payload
+rule __updateLimitWithSignatures_97c39b13_other_chain_limits_unchanged(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
     uint8 chainID;
