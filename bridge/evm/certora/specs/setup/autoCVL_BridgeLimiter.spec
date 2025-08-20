@@ -811,8 +811,8 @@ rule recordBridgeTransfers_9373d391_exceeds_limit_reverts(env e) {
     uint256 amount;
 
     // assign all the 'before' variables
-    uint256 usdAmount = calculateAmountInUSD(tokenID, amount);
-    bool willUSDAmountExceedLimit_e__chainID__tokenID__amount__before = willUSDAmountExceedLimit(e, chainID, tokenID, amount);
+    uint256 usdAmount = calculateAmountInUSD(e, tokenID, amount);
+    bool willUSDAmountExceedLimit_e__chainID__tokenID__amount__before = willUSDAmountExceedLimit(e, chainID, amount);
 
     // call function under test
     recordBridgeTransfers@withrevert(e, chainID, tokenID, amount);
