@@ -62,33 +62,6 @@ rule initialize_mismatched_arrays_revert_2(env e) {
 }
 
 /*
- * committee != address(0) => revert
- *
- * What it means: The initialize function must revert if the contract has already been initialized (committee is not zero address)
- *
- * Why it should hold: This prevents re-initialization attacks where an attacker could reset the contract state and potentially bypass existing security configurations
- *
- * Possible consequences: Re-initialization attacks, state corruption, bypass of existing security settings, potential takeover of contract control
- */
-rule initialize_already_initialized_reverts_3(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-
-    // assign all the 'before' variables
-    address committee_before = currentContract.committee;
-
-    // call function under test
-    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((committee_before != 0) => initialize_reverted);
-}
-
-/*
  * _committee != address(0) => committee@after == _committee
  *
  * What it means: When a valid committee address is provided, the committee storage variable must be set to that address after initialization
@@ -112,32 +85,6 @@ rule initialize_committee_set_correctly_4(env e) {
 
     // verify integrity
     assert ((_committee != 0) => (committee_after == _committee));
-}
-
-/*
- * _committee == address(0) => revert
- *
- * What it means: The initialize function must revert if the provided committee address is the zero address
- *
- * Why it should hold: A zero address committee would make signature verification impossible and break the bridge's security model
- *
- * Possible consequences: Complete breakdown of signature verification, unauthorized operations, bridge security compromised
- */
-rule initialize_zero_committee_reverts_5(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((_committee == 0) => initialize_reverted);
 }
 
 /*
@@ -628,22 +575,23 @@ rule updateLimitWithSignatures_preserves_oldest_timestamps_22(env e) {
  *
  * Possible consequences: Contract deployment with no functional purpose, wasted gas, and potential confusion about contract state. The contract would be deployed but unable to perform its core function of limiting bridge transfers.
  */
-rule initialize_43a5f2bc_empty_chainIDs_reverts(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((chainIDs.length == 0) => initialize_reverted), "chainIDs.length == 0 => revert";
-}
+// gereon: no such check present
+//rule initialize_43a5f2bc_empty_chainIDs_reverts(env e) {
+//    address _committee;
+//    uint8[] chainIDs;
+//    uint64[] _totalLimits;
+//
+//    // assign all the 'before' variables
+//
+//    // call function under test
+//    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
+//    bool initialize_reverted = lastReverted;
+//
+//    // assign all the 'after' variables
+//
+//    // verify integrity
+//    assert ((chainIDs.length == 0) => initialize_reverted), "chainIDs.length == 0 => revert";
+//}
 
 /*
  * chainIDs.length != _totalLimits.length => revert
@@ -680,6 +628,7 @@ rule initialize_43a5f2bc_mismatched_arrays_revert(env e) {
  *
  * Possible consequences: Contract becomes non-functional as committee-dependent operations will fail. Functions like calculateAmountInUSD and updateLimitWithSignatures would revert when trying to access committee.config().
  */
+// gereon: no such check present. Could make sense, but any other unused address would break it as well.
 rule initialize_43a5f2bc_zero_committee_reverts(env e) {
     address _committee;
     uint8[] chainIDs;
@@ -739,6 +688,9 @@ rule initialize_43a5f2bc_sets_chain_limits(env e) {
     uint256 i;
 
     // assign all the 'before' variables
+    require(
+        forall uint256 j. (i < j && j < chainIDs.length) => (chainIDs[j] != chainIDs[i])
+    );
 
     // call function under test
     initialize(e, _committee, chainIDs, _totalLimits);
@@ -759,24 +711,25 @@ rule initialize_43a5f2bc_sets_chain_limits(env e) {
  *
  * Possible consequences: Later chain IDs in the array would overwrite earlier ones, leading to unexpected limit values. This could result in either overly restrictive or overly permissive limits depending on which duplicate value is processed last.
  */
-rule initialize_43a5f2bc_duplicate_chainIDs_revert(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-    uint256 i;
-    uint256 j;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert (((i != j) && (chainIDs[i] == chainIDs[j])) => initialize_reverted), "i != j && chainIDs[i] == chainIDs[j] => revert";
-}
+// gereon: no such check present
+//rule initialize_43a5f2bc_duplicate_chainIDs_revert(env e) {
+//    address _committee;
+//    uint8[] chainIDs;
+//    uint64[] _totalLimits;
+//    uint256 i;
+//    uint256 j;
+//
+//    // assign all the 'before' variables
+//
+//    // call function under test
+//    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
+//    bool initialize_reverted = lastReverted;
+//
+//    // assign all the 'after' variables
+//
+//    // verify integrity
+//    assert (((i != j) && (chainIDs[i] == chainIDs[j])) => initialize_reverted), "i != j && chainIDs[i] == chainIDs[j] => revert";
+//}
 
 /*
  * _totalLimits[i] == 0 => revert
@@ -787,23 +740,24 @@ rule initialize_43a5f2bc_duplicate_chainIDs_revert(env e) {
  *
  * Possible consequences: Chains with zero limits would reject all bridge transfers, making bridging impossible for those chains and causing user frustration and service unavailability.
  */
-rule initialize_43a5f2bc_zero_limit_reverts(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-    uint256 i;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((_totalLimits[i] == 0) => initialize_reverted), "_totalLimits[i] == 0 => revert";
-}
+// gereon: no such check present.
+//rule initialize_43a5f2bc_zero_limit_reverts(env e) {
+//    address _committee;
+//    uint8[] chainIDs;
+//    uint64[] _totalLimits;
+//    uint256 i;
+//
+//    // assign all the 'before' variables
+//
+//    // call function under test
+//    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
+//    bool initialize_reverted = lastReverted;
+//
+//    // assign all the 'after' variables
+//
+//    // verify integrity
+//    assert ((_totalLimits[i] == 0) => initialize_reverted), "_totalLimits[i] == 0 => revert";
+//}
 
 /*
  * committee@before != address(0) => revert
@@ -814,23 +768,24 @@ rule initialize_43a5f2bc_zero_limit_reverts(env e) {
  *
  * Possible consequences: Without this protection, an attacker could re-initialize the contract to change committee address or chain limits, potentially gaining unauthorized control or disrupting service.
  */
-rule initialize_43a5f2bc_already_initialized_reverts(env e) {
-    address _committee;
-    uint8[] chainIDs;
-    uint64[] _totalLimits;
-
-    // assign all the 'before' variables
-    address currentContract_committee_before = currentContract.committee;
-
-    // call function under test
-    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((currentContract_committee_before != 0) => initialize_reverted), "committee@before != address(0) => revert";
-}
+// gereon: initialize only checks for its own initialized flag, nothing else.
+//rule initialize_43a5f2bc_already_initialized_reverts(env e) {
+//    address _committee;
+//    uint8[] chainIDs;
+//    uint64[] _totalLimits;
+//
+//    // assign all the 'before' variables
+//    address currentContract_committee_before = currentContract.committee;
+//
+//    // call function under test
+//    initialize@withrevert(e, _committee, chainIDs, _totalLimits);
+//    bool initialize_reverted = lastReverted;
+//
+//    // assign all the 'after' variables
+//
+//    // verify integrity
+//    assert ((currentContract_committee_before != 0) => initialize_reverted), "committee@before != address(0) => revert";
+//}
 
 /*
  * msg.sender != owner()@before => revert

@@ -55,35 +55,6 @@ rule transferERC20_invalid_addresses_revert_2(env e) {
 }
 
 /*
- * recipientAddress == address(this) => revert
- *
- * What it means: The function must revert if the recipient address is the contract itself
- *
- * Why it should hold: Transferring tokens to the contract itself is a meaningless operation that doesn't achieve the intended purpose of moving tokens to external recipients
- *
- * Possible consequences: Tokens remain in the vault while bridge logic thinks they were transferred, leading to accounting mismatches and potential double-spending
- */
-rule transferERC20_self_transfer_reverts_3(env e) {
-    // Declare variables
-    address tokenAddress;
-    address recipientAddress;
-    uint256 amount;
-    address currentContract_before;
-
-    // assign all the 'before' variables
-    currentContract_before = currentContract;
-
-    // call function under test
-    transferERC20@withrevert(e, tokenAddress, recipientAddress, amount);
-    bool transferERC20_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((recipientAddress == currentContract_before) => transferERC20_reverted);
-}
-
-/*
  * msg.sender != _owner => revert
  *
  * What it means: Only the contract owner can call this function, all other callers must be reverted
@@ -518,6 +489,8 @@ rule transferERC20_9db5dbe4_insufficient_balance_reverts(env e) {
     address tokenAddress;
     address recipientAddress;
     uint256 amount;
+
+    require(tokenAddress != recipientAddress);
 
     // assign all the 'before' variables
     uint256 tokenAddress_balanceOf_e__currentContract__before = tokenAddress.balanceOf(e, currentContract);
