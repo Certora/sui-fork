@@ -1148,7 +1148,7 @@ rule updateLimitWithSignatures_97c39b13_other_chain_limits_unchanged(env e) {
     BridgeUtils.Message message;
     uint8 chainID;
 
-    require(chainID < chainLimits.length);
+    require(chainID < currentContract.chainLimits.length);
 
     // assign all the 'before' variables
     uint64 chainLimits_before = currentContract.chainLimits[chainID];
@@ -1178,8 +1178,8 @@ rule updateLimitWithSignatures_97c39b13_other_chain_nonces_unchanged(env e) {
     BridgeUtils.Message message;
     uint8 chainID;
 
-    require(chainID < chainLimits.length);
-    
+    require(chainID < currentContract.chainLimits.length);
+
     // assign all the 'before' variables
     uint64 currentContract_nonces_chainID__before = currentContract.nonces[message.messageType];
 
