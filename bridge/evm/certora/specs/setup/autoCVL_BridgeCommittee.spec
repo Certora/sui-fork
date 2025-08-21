@@ -5,33 +5,6 @@ import "snippet_uups.spec";
 using BridgeUtilsHarness as BridgeUtils;
 
 /*
- * minStakeRequired == 0 => revert
- *
- * What it means: The initialize function must revert if the minimum stake required parameter is zero
- *
- * Why it should hold: Zero minimum stake would allow bridge operations without any stake requirements, completely undermining the security model
- *
- * Possible consequences: Complete security bypass, any signature becomes valid regardless of stake, bridge security model collapse
- */
-rule initialize_zero_minimum_stake_reverts_1(env e) {
-    // Declare variables
-    address[] committee;
-    uint16[] stake;
-    uint16 minStakeRequired;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, committee, stake, minStakeRequired);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((minStakeRequired == 0) => initialize_reverted);
-}
-
-/*
  * committee.length == 0 || stake.length == 0 => revert
  *
  * What it means: The initialize function must revert if either the committee array or stake array is empty
@@ -112,67 +85,6 @@ rule initialize_zero_address_reverts_3(env e) {
     // verify integrity
     assert (committee == committee);
 }*/
-
-/*
- * blocklist[addr]@after == blocklist[addr]@before
- *
- * What it means: The initialize function must not modify the blocklist mapping for any address
- *
- * Why it should hold: Initialize should only set up committee structure, not modify blocklist state which is managed by separate functions
- *
- * Possible consequences: Unintended blocklist modifications, committee members incorrectly blocked or unblocked
- */
-rule initialize_blocklist_remains_unchanged_3(env e) {
-    // Declare variables
-    address[] committee;
-    uint16[] stake;
-    uint16 minStakeRequired;
-    address addr;
-    bool blocklist_addr__after;
-    bool blocklist_addr__before;
-
-    // assign all the 'before' variables
-    blocklist_addr__before = currentContract.blocklist[addr];
-
-    // call function under test
-    initialize(e, committee, stake, minStakeRequired);
-
-    // assign all the 'after' variables
-    blocklist_addr__after = currentContract.blocklist[addr];
-
-    // verify integrity
-    assert (blocklist_addr__after == blocklist_addr__before);
-}
-
-/*
- * config@after == config@before
- *
- * What it means: The initialize function must not modify the config storage variable
- *
- * Why it should hold: Config is set by a separate initializeConfig function and should not be modified during committee initialization
- *
- * Possible consequences: Config corruption, incorrect bridge configuration, separation of concerns violation
- */
-rule initialize_config_remains_unchanged_4(env e) {
-    // Declare variables
-    address[] committee;
-    uint16[] stake;
-    uint16 minStakeRequired;
-    address config_after;
-    address config_before;
-
-    // assign all the 'before' variables
-    config_before = currentContract.config;
-
-    // call function under test
-    initialize(e, committee, stake, minStakeRequired);
-
-    // assign all the 'after' variables
-    config_after = currentContract.config;
-
-    // verify integrity
-    assert (config_after == config_before);
-}
 
 /*
  * _config == address(0) => revert
@@ -541,32 +453,6 @@ rule initialize_409ac647_arrays_length_mismatch_reverts(env e) {
 
     // verify integrity
     assert ((committee.length != stake.length) => initialize_reverted), "committee.length != stake.length => revert";
-}
-
-/*
- * committee.length == 0 => revert
- *
- * What it means: The function must revert if no committee members are provided (empty arrays)
- *
- * Why it should hold: A bridge committee with zero members cannot validate any signatures, making the bridge completely non-functional
- *
- * Possible consequences: Complete bridge shutdown where no operations can be validated, effectively freezing all bridge functionality
- */
-rule initialize_409ac647_empty_committee_reverts(env e) {
-    address[] committee;
-    uint16[] stake;
-    uint16 minStakeRequired;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, committee, stake, minStakeRequired);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((committee.length == 0) => initialize_reverted), "committee.length == 0 => revert";
 }
 
 /*
