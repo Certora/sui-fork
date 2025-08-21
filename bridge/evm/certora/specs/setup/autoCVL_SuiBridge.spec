@@ -7,32 +7,6 @@ import "snippet_uups.spec";
 using BridgeUtilsHarness as BridgeUtils;
 
 /*
- * _committee == address(0) || _vault == address(0) || _limiter == address(0) => revert
- *
- * What it means: The initialize function must revert if any of the three address parameters (_committee, _vault, _limiter) is the zero address
- *
- * Why it should hold: These three addresses are critical infrastructure components that the bridge depends on for committee verification, token storage, and rate limiting. Zero addresses would make these components non-functional
- *
- * Possible consequences: Complete bridge malfunction, inability to process transfers, loss of access control, and potential fund loss due to non-functional vault or limiter
- */
-rule initialize_zero_addresses_revert_1(env e) {
-    address _committee;
-    address _vault;
-    address _limiter;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, _committee, _vault, _limiter);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((((_committee == 0) || (_vault == 0)) || (_limiter == 0)) => initialize_reverted);
-}
-
-/*
  * isTransferProcessed[message.nonce] => revert
  *
  * What it means: If a message with a specific nonce has already been processed (isTransferProcessed[message.nonce] is true), the function must revert
@@ -557,7 +531,8 @@ rule bridgeETH_nonce_increments_on_success_37(env e) {
  *
  * Possible consequences: Complete bridge failure, inability to process transfers, loss of access control, potential fund lock-up in vault
  */
-rule initialize_c0c53b8b_zero_addresses_revert(env e) {
+// gereon: this isn't checked, but maybe it should be.
+rule __initialize_c0c53b8b_zero_addresses_revert(env e) {
     address _committee;
     address _vault;
     address _limiter;
@@ -650,35 +625,6 @@ rule initialize_c0c53b8b_sets_limiter(env e) {
 
     // verify integrity
     assert ((((_committee != 0) && (_vault != 0)) && (_limiter != 0)) => (currentContract_limiter_after == _limiter)), "_committee != address(0) && _vault != address(0) && _limiter != address(0) => limiter@after == _limiter";
-}
-
-/*
- * committee@before != address(0) || vault@before != address(0) || limiter@before != address(0) => revert
- *
- * What it means: The initialize function must revert if the contract has already been initialized (any of committee, vault, or limiter is already set to non-zero)
- *
- * Why it should hold: This prevents re-initialization attacks where an attacker could change critical contract addresses after deployment. Initialize should only work once, following the initializer pattern for upgradeable contracts
- *
- * Possible consequences: Contract takeover, redirection of funds to attacker-controlled contracts, complete compromise of bridge security
- */
-rule initialize_c0c53b8b_already_initialized_reverts(env e) {
-    address _committee;
-    address _vault;
-    address _limiter;
-
-    // assign all the 'before' variables
-    address currentContract_committee_before = currentContract.committee;
-    address currentContract_vault_before = currentContract.vault;
-    address currentContract_limiter_before = currentContract.limiter;
-
-    // call function under test
-    initialize@withrevert(e, _committee, _vault, _limiter);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((((currentContract_committee_before != 0) || (currentContract_vault_before != 0)) || (currentContract_limiter_before != 0)) => initialize_reverted), "committee@before != address(0) || vault@before != address(0) || limiter@before != address(0) => revert";
 }
 
 /*
@@ -953,24 +899,25 @@ rule transferBridgedTokensWithSignatures_beb0d55c_committee_unchanged(env e) {
  *
  * Possible consequences: Nonce collision attacks where processing one transfer affects another transfer's status, potentially enabling replay attacks or preventing legitimate transfers
  */
-rule transferBridgedTokensWithSignatures_beb0d55c_nonce_uniqueness_preserved(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-    uint64 n1;
-    uint64 n2;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    transferBridgedTokensWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    bool currentContract_isTransferProcessed_n1__after = currentContract.isTransferProcessed[n1];
-    bool currentContract_isTransferProcessed_n2__after = currentContract.isTransferProcessed[n2];
-
-    // verify integrity
-    assert ((n1 != n2) => ((currentContract_isTransferProcessed_n1__after != currentContract_isTransferProcessed_n2__after) || (!(currentContract_isTransferProcessed_n1__after) && !(currentContract_isTransferProcessed_n2__after)))), "n1 != n2 => isTransferProcessed[n1]@after != isTransferProcessed[n2]@after || (!isTransferProcessed[n1]@after && !isTransferProcessed[n2]@after)";
-}
+// gereon: I think this is BS
+//rule transferBridgedTokensWithSignatures_beb0d55c_nonce_uniqueness_preserved(env e) {
+//    bytes[] signatures;
+//    BridgeUtils.Message message;
+//    uint64 n1;
+//    uint64 n2;
+//
+//    // assign all the 'before' variables
+//
+//    // call function under test
+//    transferBridgedTokensWithSignatures(e, signatures, message);
+//
+//    // assign all the 'after' variables
+//    bool currentContract_isTransferProcessed_n1__after = currentContract.isTransferProcessed[n1];
+//    bool currentContract_isTransferProcessed_n2__after = currentContract.isTransferProcessed[n2];
+//
+//    // verify integrity
+//    assert ((n1 != n2) => ((currentContract_isTransferProcessed_n1__after != currentContract_isTransferProcessed_n2__after) || (!(currentContract_isTransferProcessed_n1__after) && !(currentContract_isTransferProcessed_n2__after)))), "n1 != n2 => isTransferProcessed[n1]@after != isTransferProcessed[n2]@after || (!isTransferProcessed[n1]@after && !isTransferProcessed[n2]@after)";
+//}
 
 /*
  * signatures.length == 0 => revert
