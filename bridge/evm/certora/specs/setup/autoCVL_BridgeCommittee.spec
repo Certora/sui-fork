@@ -13,7 +13,8 @@ using BridgeUtilsHarness as BridgeUtils;
  *
  * Possible consequences: Complete bridge system failure, inability to process any cross-chain transactions, permanent DoS of bridge functionality
  */
-rule initialize_empty_arrays_revert_1(env e) {
+// gereon: there is no such check. Empty arrays don't make much sense...
+rule __initialize_empty_arrays_revert_1(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
@@ -649,10 +650,12 @@ rule initialize_409ac647_valid_setup_updates_index(env e) {
  *
  * Possible consequences: Incorrect stake assignments for committee members beyond the first, undermining signature validation
  */
+// gereon: AI ignored that further entries could overwrite the second member's stake
 rule initialize_409ac647_second_member_stake_set(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
+    uint256 i = require_uint256(committee.length - 1);
 
     // assign all the 'before' variables
 
@@ -660,10 +663,10 @@ rule initialize_409ac647_second_member_stake_set(env e) {
     initialize(e, committee, stake, minStakeRequired);
 
     // assign all the 'after' variables
-    uint16 currentContract_committeeStake_committee_1___after = currentContract.committeeStake[committee[1]];
+    uint16 committeeStake_after = currentContract.committeeStake[committee[i]];
 
     // verify integrity
-    assert ((((committee.length > 1) && (committee.length == stake.length)) && (minStakeRequired > 0)) => (currentContract_committeeStake_committee_1___after == stake[1])), "committee.length > 1 && committee.length == stake.length && minStakeRequired > 0 => committeeStake[committee[1]]@after == stake[1]";
+    assert ((((committee.length > 1) && (committee.length == stake.length)) && (minStakeRequired > 0)) => (committeeStake_after == stake[i])), "committee.length > 1 && committee.length == stake.length && minStakeRequired > 0 => committeeStake[committee[1]]@after == stake[1]";
 }
 
 /*
@@ -675,12 +678,16 @@ rule initialize_409ac647_second_member_stake_set(env e) {
  *
  * Possible consequences: Incorrect index assignments leading to broken duplicate signature detection
  */
+// gereon: AI ignored that further entries could overwrite the second member's index
 rule initialize_409ac647_second_member_index_set(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
 
     // assign all the 'before' variables
+    require(
+        forall uint256 j. (1 < j && j < committee.length) => (committee[j] != committee[1])
+    );
 
     // call function under test
     initialize(e, committee, stake, minStakeRequired);
