@@ -1411,6 +1411,7 @@ rule bridgeERC20_212afaff_insufficient_balance_reverts(env e) {
  *
  * Possible consequences: Nonce manipulation could enable replay attacks or cause message processing failures on the destination chain
  */
+// gereon: for some reason the AI thought TOKEN_TRANSFER is 1, not 0.
 rule bridgeERC20_212afaff_nonce_increments(env e) {
     uint8 tokenID;
     uint256 amount;
@@ -1423,13 +1424,13 @@ rule bridgeERC20_212afaff_nonce_increments(env e) {
     bool currentContract_committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
     uint256 currentContract_committee_config_e__tokenAddressOf_e__tokenID__before_allowance_e__e_msg_sender__currentContract__before = currentContract_committee_config_e__tokenAddressOf_e__tokenID__before.allowance(e, e.msg.sender, currentContract);
     uint256 currentContract_committee_config_e__tokenAddressOf_e__tokenID__before_balanceOf_e__e_msg_sender__before = currentContract_committee_config_e__tokenAddressOf_e__tokenID__before.balanceOf(e, e.msg.sender);
-    uint64 currentContract_nonces_1__before = currentContract.nonces[1];
+    uint64 currentContract_nonces_1__before = currentContract.nonces[0];
 
     // call function under test
     bridgeERC20(e, tokenID, amount, recipientAddress, destinationChainID);
 
     // assign all the 'after' variables
-    uint64 currentContract_nonces_1__after = currentContract.nonces[1];
+    uint64 currentContract_nonces_1__after = currentContract.nonces[0];
 
     // verify integrity
     assert (((((((!(paused_e__before) && (amount > 0)) && (currentContract_committee_config_e__tokenAddressOf_e__tokenID__before != 0)) && currentContract_committee_config_e__isChainSupported_e__destinationChainID__before) && (recipientAddress.length == 32)) && (currentContract_committee_config_e__tokenAddressOf_e__tokenID__before_allowance_e__e_msg_sender__currentContract__before >= amount)) && (currentContract_committee_config_e__tokenAddressOf_e__tokenID__before_balanceOf_e__e_msg_sender__before >= amount)) => (currentContract_nonces_1__after == currentContract_nonces_1__before + 1)), "!paused()@before && amount > 0 && committee@before.config().tokenAddressOf(tokenID) != address(0) && committee@before.config().isChainSupported(destinationChainID) && recipientAddress.length == 32 && IERC20(committee@before.config().tokenAddressOf(tokenID)).allowance(msg.sender, address(this))@before >= amount && IERC20(committee@before.config().tokenAddressOf(tokenID)).balanceOf(msg.sender)@before >= amount => nonces[1]@after == nonces[1]@before + 1";
