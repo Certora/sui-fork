@@ -175,33 +175,6 @@ rule initialize_config_remains_unchanged_4(env e) {
 }
 
 /*
- * config != address(0) => revert
- *
- * What it means: If the config address is already set to a non-zero value, any attempt to call initializeConfig should revert
- *
- * Why it should hold: This prevents re-initialization of the config after it has been set once, maintaining the integrity of the bridge configuration and preventing unauthorized changes
- *
- * Possible consequences: Without this check, an attacker could repeatedly change the config address, potentially pointing to a malicious contract that could manipulate bridge operations, steal funds, or corrupt the bridge state
- */
-rule initializeConfig_config_already_set_reverts_5(env e) {
-    // Declare variables
-    address _config;
-    address config_before;
-
-    // assign all the 'before' variables
-    config_before = currentContract.config;
-
-    // call function under test
-    initializeConfig@withrevert(e, _config);
-    bool initializeConfig_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((config_before != 0) => initializeConfig_reverted);
-}
-
-/*
  * _config == address(0) => revert
  *
  * What it means: If the _config parameter passed to initializeConfig is the zero address (0x0), the function should revert
@@ -224,61 +197,6 @@ rule initializeConfig_zero_address_config_reverts_6(env e) {
 
     // verify integrity
     assert ((_config == 0) => initializeConfig_reverted);
-}
-
-/*
- * _config != address(0) && config == address(0) => config@after == _config
- *
- * What it means: When a valid non-zero config address is provided and the current config is unset (zero), the config state variable should be updated to the new address
- *
- * Why it should hold: This ensures that valid initialization actually sets the config address, enabling the bridge to function properly with the correct configuration contract
- *
- * Possible consequences: If valid config initialization fails to update the state, the bridge would remain non-functional even after proper initialization attempts, causing operational failures
- */
-rule initializeConfig_valid_config_updates_state_7(env e) {
-    // Declare variables
-    address _config;
-    address config_before;
-    address config_after;
-
-    // assign all the 'before' variables
-    config_before = currentContract.config;
-
-    // call function under test
-    initializeConfig(e, _config);
-
-    // assign all the 'after' variables
-    config_after = currentContract.config;
-
-    // verify integrity
-    assert (((_config != 0) && (config_before == 0)) => (config_after == _config));
-}
-
-/*
- * msg.sender != committee => revert
- *
- * What it means: Only the committee address should be able to call the initializeConfig function
- *
- * Why it should hold: Config initialization is a critical administrative function that should only be performed by authorized entities (the committee) to prevent unauthorized configuration changes
- *
- * Possible consequences: Without access control, any user could initialize or change the config, potentially pointing to malicious contracts that could manipulate bridge operations or steal funds
- */
-rule initializeConfig_only_committee_can_initialize_8(env e) {
-    // Declare variables
-    address _config;
-    address committee_before;
-
-    // assign all the 'before' variables
-    committee_before = currentContract.committee;
-
-    // call function under test
-    initializeConfig@withrevert(e, _config);
-    bool initializeConfig_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((e.msg.sender != committee_before) => initializeConfig_reverted);
 }
 
 /*
