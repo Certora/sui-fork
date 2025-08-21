@@ -2,8 +2,8 @@
 // Should become obsolete with https://certora.atlassian.net/browse/CERT-8747
 methods {
 
-    function chainHourlyTransferAmount(uint256 chainHourTimestamp) external returns (uint256) envfree;
-    function getChainHourTimestampKey(uint8 chainID, uint32 hourTimestamp) external returns (uint256) envfree;
+    function _.chainHourlyTransferAmount(uint256 chainHourTimestamp) external returns (uint256) envfree;
+    function _.getChainHourTimestampKey(uint8 chainID, uint32 hourTimestamp) external returns (uint256) envfree;
 
     function _.calculateWindowAmount(uint8 chainID) external with(env e) => CVL_calculateWindowAmount(e, chainID) expect (uint256);
     function _.calculateWindowAmount(uint8 chainID) internal with(env e) => CVL_calculateWindowAmount(e, chainID) expect (uint256);
