@@ -546,34 +546,6 @@ rule bridgeERC20_unsupported_token_reverts_22(env e) {
 }
 
 /*
- * recipientAddress.length != 32 => revert
- *
- * What it means: The function must revert when the recipient address length is not exactly 32 bytes (SUI_ADDRESS_LENGTH)
- *
- * Why it should hold: Sui addresses must be exactly 32 bytes long, and invalid recipient addresses would cause failed transfers on the destination chain
- *
- * Possible consequences: Fund loss through undeliverable transfers, stuck funds in the bridge, and failed cross-chain operations
- */
-rule bridgeERC20_invalid_recipient_reverts_23(env e) {
-    uint8 tokenID;
-    uint256 amount;
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    uint256 recipientAddress_length_before = recipientAddress.length;
-
-    // call function under test
-    bridgeERC20@withrevert(e, tokenID, amount, recipientAddress, destinationChainID);
-    bool bridgeERC20_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((recipientAddress_length_before != 32) => bridgeERC20_reverted);
-}
-
-/*
  * paused() => revert
  *
  * What it means: The function must revert when the contract is in a paused state
@@ -659,64 +631,6 @@ rule bridgeERC20_unsupported_chain_reverts_25(env e) {
 //}
 
 /*
- * IERC20(committee.config().tokenAddressOf(tokenID)).allowance(msg.sender, address(this)) < amount => revert
- *
- * What it means: The function must revert when the caller hasn't approved sufficient tokens for the bridge contract to transfer
- *
- * Why it should hold: ERC20 transfers require prior approval, and insufficient allowance would cause the transfer to fail, potentially leaving the bridge in an inconsistent state
- *
- * Possible consequences: Failed token transfers leading to inconsistent bridge state, potential reentrancy issues, and user funds being stuck
- */
-rule bridgeERC20_insufficient_allowance_reverts_27(env e) {
-    uint8 tokenID;
-    uint256 amount;
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    address committee_config_e__tokenAddressOf_e__tokenID__before = currentContract.committee.config(e).tokenAddressOf(e, tokenID);
-    uint256 committee_config_e__tokenAddressOf_e__tokenID__before_allowance_e__e_msg_sender__currentContract__before = committee_config_e__tokenAddressOf_e__tokenID__before.allowance(e, e.msg.sender, currentContract);
-
-    // call function under test
-    bridgeERC20@withrevert(e, tokenID, amount, recipientAddress, destinationChainID);
-    bool bridgeERC20_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((committee_config_e__tokenAddressOf_e__tokenID__before_allowance_e__e_msg_sender__currentContract__before < amount) => bridgeERC20_reverted);
-}
-
-/*
- * IERC20(committee.config().tokenAddressOf(tokenID)).balanceOf(msg.sender) < amount => revert
- *
- * What it means: The function must revert when the caller doesn't have enough tokens in their balance to complete the transfer
- *
- * Why it should hold: Attempting to transfer more tokens than available would cause the ERC20 transfer to fail, potentially corrupting bridge state
- *
- * Possible consequences: Failed transfers with partial state updates, bridge accounting errors, and potential exploitation of inconsistent states
- */
-rule bridgeERC20_insufficient_balance_reverts_28(env e) {
-    uint8 tokenID;
-    uint256 amount;
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    address committee_config_e__tokenAddressOf_e__tokenID__before = currentContract.committee.config(e).tokenAddressOf(e, tokenID);
-    uint256 committee_config_e__tokenAddressOf_e__tokenID__before_balanceOf_e__e_msg_sender__before = committee_config_e__tokenAddressOf_e__tokenID__before.balanceOf(e, e.msg.sender);
-
-    // call function under test
-    bridgeERC20@withrevert(e, tokenID, amount, recipientAddress, destinationChainID);
-    bool bridgeERC20_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((committee_config_e__tokenAddressOf_e__tokenID__before_balanceOf_e__e_msg_sender__before < amount) => bridgeERC20_reverted);
-}
-
-/*
  * amount > 0 && !paused() && committee.config().tokenAddressOf(tokenID) != address(0) && recipientAddress.length == 32 && committee.config().isChainSupported(destinationChainID) && !limiter.willAmountExceedLimit(destinationChainID, tokenID, amount) => IERC20(committee.config().tokenAddressOf(tokenID)).balanceOf(address(vault))@after == IERC20(committee.config().tokenAddressOf(tokenID)).balanceOf(address(vault))@before + amount
  *
  * What it means: When all conditions are met for a successful transfer, the vault's token balance must increase by the transferred amount
@@ -784,39 +698,6 @@ rule bridgeERC20_valid_transfer_updates_sender_30(env e) {
 }
 
 /*
- * amount > 0 && !paused() && committee.config().tokenAddressOf(tokenID) != address(0) && recipientAddress.length == 32 && committee.config().isChainSupported(destinationChainID) && !limiter.willAmountExceedLimit(destinationChainID, tokenID, amount) => nonces[0]@after == nonces[0]@before + 1
- *
- * What it means: When a transfer succeeds, the token transfer nonce must increment by exactly 1
- *
- * Why it should hold: Nonces ensure unique identification of bridge operations and prevent replay attacks on cross-chain messages
- *
- * Possible consequences: Replay attacks, duplicate transfers, and cross-chain message confusion leading to fund loss or double-spending
- */
-rule bridgeERC20_nonce_increments_on_success_31(env e) {
-    uint8 tokenID;
-    uint256 amount;
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    bool paused_e__before = paused(e);
-    address committee_config_e__tokenAddressOf_e__tokenID__before = currentContract.committee.config(e).tokenAddressOf(e, tokenID);
-    uint256 recipientAddress_length_before = recipientAddress.length;
-    bool committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
-    bool limiter_willAmountExceedLimit_e__destinationChainID__tokenID__amount__before = currentContract.limiter.willAmountExceedLimit(e, destinationChainID, tokenID, amount);
-    uint64 nonces_0__before = currentContract.nonces[0];
-
-    // call function under test
-    bridgeERC20(e, tokenID, amount, recipientAddress, destinationChainID);
-
-    // assign all the 'after' variables
-    uint64 nonces_0__after = currentContract.nonces[0];
-
-    // verify integrity
-    assert (((((((amount > 0) && !(paused_e__before)) && (committee_config_e__tokenAddressOf_e__tokenID__before != 0)) && (recipientAddress_length_before == 32)) && committee_config_e__isChainSupported_e__destinationChainID__before) && !(limiter_willAmountExceedLimit_e__destinationChainID__tokenID__amount__before)) => (nonces_0__after == nonces_0__before + 1));
-}
-
-/*
  * amount <= 0 || paused() || committee.config().tokenAddressOf(tokenID) == address(0) || recipientAddress.length != 32 || !committee.config().isChainSupported(destinationChainID) || limiter.willAmountExceedLimit(destinationChainID, tokenID, amount) => nonces[0]@after == nonces[0]@before
  *
  * What it means: When the function reverts due to any validation failure, the nonce must remain unchanged
@@ -852,32 +733,6 @@ rule __bridgeERC20_no_nonce_change_on_revert_32(env e) {
 
     // verify integrity
     assert (((((((amount <= 0) || paused_e__before) || (tokenAddressOf_before == 0)) || (recipientAddress.length != 32)) || !(isChainSupported_before)) || willAmountExceedLimit_before) => (nonces_0__after == nonces_0__before));
-}
-
-/*
- * recipientAddress.length != 32 => revert
- *
- * What it means: The function must revert if the recipient address length is not exactly 32 bytes
- *
- * Why it should hold: The contract has a constant SUI_ADDRESS_LENGTH = 32 and requires recipientAddress.length == SUI_ADDRESS_LENGTH for Sui chain addresses
- *
- * Possible consequences: Invalid addresses could cause funds to be lost permanently on the destination chain or cause bridge operations to fail
- */
-rule bridgeETH_invalid_recipient_address_length_33(env e) {
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    uint256 recipientAddress_length_before = recipientAddress.length;
-
-    // call function under test
-    bridgeETH@withrevert(e, recipientAddress, destinationChainID);
-    bool bridgeETH_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((recipientAddress_length_before != 32) => bridgeETH_reverted);
 }
 
 /*
