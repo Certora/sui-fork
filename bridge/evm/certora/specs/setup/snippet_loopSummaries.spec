@@ -1,14 +1,15 @@
-// summarizes loops that are too long
-// Should become obsolete with https://certora.atlassian.net/browse/CERT-8747
 methods {
-
     function _.chainHourlyTransferAmount(uint256 chainHourTimestamp) external envfree;
     function _.getChainHourTimestampKey(uint8 chainID, uint32 hourTimestamp) external envfree;
-
     function _.calculateWindowAmount(uint8 chainID) external with(env e) => CVL_calculateWindowAmount(e, executingContract, chainID) expect (uint256);
     function _.calculateWindowAmount(uint8 chainID) internal with(env e) => CVL_calculateWindowAmount(e, executingContract, chainID) expect (uint256);
 }
 
+/**
+ * The calculateWindowAmount iterates over the last 24 hours. It's not feasible
+ * to increase the loop iter to 24, hence we manually unroll it in this summary.
+ * Might become obsolete with https://certora.atlassian.net/browse/CERT-8747
+ */
 function CVL_calculateWindowAmount(env e, address caller, uint8 chainID) returns uint256 {
     uint32 ch = caller.currentHour(e);
     return require_uint256(
