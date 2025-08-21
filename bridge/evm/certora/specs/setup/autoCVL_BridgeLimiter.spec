@@ -68,6 +68,7 @@ rule initialize_committee_set_correctly_4(env e) {
  *
  * Possible consequences: Unpredictable limit values for chains, potential for setting unintended limits, configuration confusion
  */
+// gereon: AI totally missed to encode the "last" part of this rule...
 rule initialize_duplicate_chainIDs_preserved_7(env e) {
     address _committee;
     uint8[] chainIDs;
@@ -76,27 +77,19 @@ rule initialize_duplicate_chainIDs_preserved_7(env e) {
     uint256 j;
 
     // assign all the 'before' variables
-    uint256 chainIDs_length_before = chainIDs.length;
-    uint8 chainIDs_i__before = chainIDs[i];
-    uint8 chainIDs_j__before = chainIDs[j];
-    uint64 _totalLimits_j__before = _totalLimits[j];
 
-    require(i < chainIDs.length);
-    require(j < chainIDs.length);
-    require(i != j);
-    require(chainIDs_i__before == chainIDs_j__before);
-    require(
-        forall uint256 k. (i < k && j < k && k < chainIDs.length) => (chainIDs[i] != chainIDs[k])
-    );
+    require(i < j && j < chainIDs.length);
+    require(chainIDs[i] == chainIDs[j]);
+    require(forall uint256 k. (j < k && k < chainIDs.length) => (chainIDs[j] != chainIDs[k]));
 
     // call function under test
     initialize(e, _committee, chainIDs, _totalLimits);
 
     // assign all the 'after' variables
-    uint64 chainLimits_chainIDs_i__before__after = currentContract.chainLimits[chainIDs_i__before];
+    uint64 chainLimits_j = currentContract.chainLimits[chainIDs[j]];
 
     // verify integrity
-    assert (((i < chainIDs_length_before) && (j < chainIDs_length_before)) => (chainLimits_chainIDs_i__before__after == _totalLimits_j__before));
+    assert (chainLimits_j == _totalLimits[j]);
 }
 
 /*
