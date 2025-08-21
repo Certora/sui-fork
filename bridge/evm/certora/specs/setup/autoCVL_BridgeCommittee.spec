@@ -42,7 +42,8 @@ rule __initialize_empty_arrays_revert_1(env e) {
  *
  * Possible consequences: Reduced effective committee size, potential signature verification failures, weakened bridge security
  */
-rule initialize_zero_address_reverts_3(env e) {
+ // gereon: there is no such check. maybe it should exist...
+rule __initialize_zero_address_reverts_3(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
@@ -313,95 +314,6 @@ rule updateBlocklistWithSignatures_no_stake_signer_reverts_13(env e) {
 }
 
 /*
- * signatures[i].length != 65 => revert
- *
- * What it means: The function must revert if any signature in the array is not exactly 65 bytes long
- *
- * Why it should hold: ECDSA signatures must be exactly 65 bytes (32 bytes r + 32 bytes s + 1 byte v) for proper cryptographic verification
- *
- * Possible consequences: Signature verification bypass or unexpected behavior in signature parsing, potential for malformed data to cause state corruption
- */
-rule updateBlocklistWithSignatures_invalid_signature_length_reverts_14(env e) {
-    // Declare variables
-    bytes[] signatures;
-    BridgeUtils.Message message;
-    uint256 i;
-    uint256 signatures_i__length_before;
-
-    // assign all the 'before' variables
-    signatures_i__length_before = assert_uint256(signatures[i].length);
-
-    // call function under test
-    updateBlocklistWithSignatures@withrevert(e, signatures, message);
-    bool updateBlocklistWithSignatures_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((signatures_i__length_before != 65) => updateBlocklistWithSignatures_reverted);
-}
-
-/*
- * committeeStake[address]@after == committeeStake[address]@before
- *
- * What it means: The stake amounts of all committee members should remain the same after blocklist updates
- *
- * Why it should hold: Blocklist operations should only affect blocklist status, not stake amounts which are managed separately
- *
- * Possible consequences: Unintended modification of committee voting power during blocklist operations, disrupting governance balance
- */
-rule updateBlocklistWithSignatures_committee_stake_unchanged_15(env e) {
-    // Declare variables
-    bytes[] signatures;
-    BridgeUtils.Message message;
-    uint16 committeeStake_address__after;
-    uint16 committeeStake_address__before;
-    address a;
-
-    // assign all the 'before' variables
-    committeeStake_address__before = assert_uint16(currentContract.committeeStake[a]);
-
-    // call function under test
-    updateBlocklistWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    committeeStake_address__after = assert_uint16(currentContract.committeeStake[a]);
-
-    // verify integrity
-    assert (committeeStake_address__after == committeeStake_address__before);
-}
-
-/*
- * committeeIndex[address]@after == committeeIndex[address]@before
- *
- * What it means: The index positions of all committee members should remain the same after blocklist updates
- *
- * Why it should hold: Blocklist operations should not affect the committee structure or member indexing
- *
- * Possible consequences: Corruption of committee member indexing leading to signature verification failures or incorrect stake calculations
- */
-rule updateBlocklistWithSignatures_committee_index_unchanged_16(env e) {
-    // Declare variables
-    bytes[] signatures;
-    BridgeUtils.Message message;
-    uint8 committeeIndex_address__after;
-    uint8 committeeIndex_address__before;
-    address a;
-
-    // assign all the 'before' variables
-    committeeIndex_address__before = assert_uint8(currentContract.committeeIndex[a]);
-
-    // call function under test
-    updateBlocklistWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    committeeIndex_address__after = assert_uint8(currentContract.committeeIndex[a]);
-
-    // verify integrity
-    assert (committeeIndex_address__after == committeeIndex_address__before);
-}
-
-/*
  * config@after == config@before
  *
  * What it means: The config contract address should remain the same after blocklist updates
@@ -465,7 +377,8 @@ rule initialize_409ac647_arrays_length_mismatch_reverts(env e) {
  *
  * Possible consequences: Complete security bypass where any bridge operation can be executed without proper authorization
  */
-rule initialize_409ac647_zero_min_stake_reverts(env e) {
+// gereon: no such check exists, but it would make sense
+rule __initialize_409ac647_zero_min_stake_reverts(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
@@ -598,21 +511,23 @@ rule initialize_409ac647_stake_overflow_reverts(env e) {
  *
  * Possible consequences: Committee members having incorrect stakes, leading to wrong signature validation thresholds
  */
+// gereon: and once again, the AI misses that the committee addresses may not be distinct.
 rule initialize_409ac647_valid_setup_updates_stake(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
 
     // assign all the 'before' variables
+    require(forall uint256 i. (0 < i && i < committee.length) => (committee[0] != committee[i]));
 
     // call function under test
     initialize(e, committee, stake, minStakeRequired);
 
     // assign all the 'after' variables
-    uint16 currentContract_committeeStake_committee_0___after = currentContract.committeeStake[committee[0]];
+    uint16 committeeStake_after = currentContract.committeeStake[committee[0]];
 
     // verify integrity
-    assert ((((committee.length > 0) && (committee.length == stake.length)) && (minStakeRequired > 0)) => (currentContract_committeeStake_committee_0___after == stake[0])), "committee.length > 0 && committee.length == stake.length && minStakeRequired > 0 => committeeStake[committee[0]]@after == stake[0]";
+    assert ((((committee.length > 0) && (committee.length == stake.length)) && (minStakeRequired > 0)) => (committeeStake_after == stake[0])), "committee.length > 0 && committee.length == stake.length && minStakeRequired > 0 => committeeStake[committee[0]]@after == stake[0]";
 }
 
 /*
@@ -624,12 +539,14 @@ rule initialize_409ac647_valid_setup_updates_stake(env e) {
  *
  * Possible consequences: Broken duplicate signature detection allowing signature replay attacks
  */
+// gereon: and once again, the AI misses that the committee addresses may not be distinct.
 rule initialize_409ac647_valid_setup_updates_index(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
 
     // assign all the 'before' variables
+    require(forall uint256 i. (0 < i && i < committee.length) => (committee[0] != committee[i]));
 
     // call function under test
     initialize(e, committee, stake, minStakeRequired);
@@ -908,12 +825,13 @@ rule updateBlocklistWithSignatures_f6f66e98_invalid_signature_length_revert(env 
  *
  * Possible consequences: Replay attacks where old blocklist update messages are reused, or out-of-order message processing leading to inconsistent state
  */
+// gereon: and again, nonces are indexed by message type, not chain id
 rule updateBlocklistWithSignatures_f6f66e98_invalid_nonce_revert(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
     // assign all the 'before' variables
-    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.chainID];
+    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.messageType];
 
     // call function under test
     updateBlocklistWithSignatures@withrevert(e, signatures, message);
@@ -934,18 +852,19 @@ rule updateBlocklistWithSignatures_f6f66e98_invalid_nonce_revert(env e) {
  *
  * Possible consequences: Nonce desynchronization could allow replay attacks or prevent legitimate future messages from being processed
  */
+// gereon: and again, nonces are indexed by message type, not chain id
 rule updateBlocklistWithSignatures_f6f66e98_nonce_incremented(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
     // assign all the 'before' variables
-    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.chainID];
+    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.messageType];
 
     // call function under test
     updateBlocklistWithSignatures(e, signatures, message);
 
     // assign all the 'after' variables
-    uint64 currentContract_nonces_message_chainID__after = currentContract.nonces[message.chainID];
+    uint64 currentContract_nonces_message_chainID__after = currentContract.nonces[message.messageType];
 
     // verify integrity
     assert (currentContract_nonces_message_chainID__after == currentContract_nonces_message_chainID__before + 1), "nonces[message.chainID]@after == nonces[message.chainID]@before + 1";
@@ -1067,20 +986,21 @@ rule updateBlocklistWithSignatures_f6f66e98_blocklist_changes(env e) {
  *
  * Possible consequences: Cross-chain nonce interference could disrupt message processing for other chains or create synchronization issues
  */
+// gereon: and again, nonces are indexed by message type, not chain id
 rule updateBlocklistWithSignatures_f6f66e98_other_nonces_unchanged(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
-    uint8 chainID;
+    uint8 messageType;
 
     // assign all the 'before' variables
-    uint64 currentContract_nonces_chainID__before = currentContract.nonces[chainID];
+    uint64 currentContract_nonces_chainID__before = currentContract.nonces[messageType];
 
     // call function under test
     updateBlocklistWithSignatures(e, signatures, message);
 
     // assign all the 'after' variables
-    uint64 currentContract_nonces_chainID__after = currentContract.nonces[chainID];
+    uint64 currentContract_nonces_chainID__after = currentContract.nonces[messageType];
 
     // verify integrity
-    assert ((chainID != message.chainID) => (currentContract_nonces_chainID__after == currentContract_nonces_chainID__before)), "chainID != message.chainID => nonces[chainID]@after == nonces[chainID]@before";
+    assert ((messageType != message.messageType) => (currentContract_nonces_chainID__after == currentContract_nonces_chainID__before)), "chainID != message.chainID => nonces[chainID]@after == nonces[chainID]@before";
 }
