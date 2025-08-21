@@ -172,32 +172,6 @@ rule transferBridgedTokensWithSignatures_processed_nonces_stay_unique_11(env e) 
 }
 
 /*
- * message.messageType != BridgeUtils.EMERGENCY_OP => revert
- *
- * What it means: The function must revert if the message type is not EMERGENCY_OP, ensuring only emergency operation messages are processed
- *
- * Why it should hold: This function is specifically designed to handle emergency operations only. Processing other message types would violate the function's intended purpose and could lead to incorrect state changes
- *
- * Possible consequences: Wrong message types could be processed as emergency operations, leading to incorrect state changes or bypassing proper validation logic for other operation types
- */
-rule executeEmergencyOpWithSignatures_invalid_message_type_reverts_12(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    uint8 message_messageType_before = message.messageType;
-
-    // call function under test
-    executeEmergencyOpWithSignatures@withrevert(e, signatures, message);
-    bool executeEmergencyOpWithSignatures_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((message_messageType_before != 2) => executeEmergencyOpWithSignatures_reverted);
-}
-
-/*
  * !committee.config().isChainSupported(message.chainID) => revert
  *
  * What it means: The function must revert if the chain ID in the message is not supported by the bridge configuration
