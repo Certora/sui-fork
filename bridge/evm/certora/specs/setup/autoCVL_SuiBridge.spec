@@ -332,33 +332,6 @@ rule executeEmergencyOpWithSignatures_invalid_message_type_reverts_12(env e) {
 }
 
 /*
- * isTransferProcessed[message.nonce] => revert
- *
- * What it means: The function must revert if the message nonce has already been processed, preventing replay attacks
- *
- * Why it should hold: Each emergency operation message should only be executed once. Allowing replay of the same nonce could lead to duplicate emergency operations being executed
- *
- * Possible consequences: Replay attacks could allow the same emergency operation to be executed multiple times, potentially causing unintended state changes or resource exhaustion
- */
-rule executeEmergencyOpWithSignatures_processed_nonce_reverts_13(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    uint64 message_nonce_before = message.nonce;
-    bool isTransferProcessed_message_nonce_before__before = currentContract.isTransferProcessed[message_nonce_before];
-
-    // call function under test
-    executeEmergencyOpWithSignatures@withrevert(e, signatures, message);
-    bool executeEmergencyOpWithSignatures_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert (isTransferProcessed_message_nonce_before__before => executeEmergencyOpWithSignatures_reverted);
-}
-
-/*
  * !committee.config().isChainSupported(message.chainID) => revert
  *
  * What it means: The function must revert if the chain ID in the message is not supported by the bridge configuration
@@ -367,13 +340,14 @@ rule executeEmergencyOpWithSignatures_processed_nonce_reverts_13(env e) {
  *
  * Possible consequences: Emergency operations could be executed for unsupported chains, potentially causing inconsistent state or wasting resources on chains the bridge doesn't operate on
  */
-rule executeEmergencyOpWithSignatures_unsupported_chain_reverts_14(env e) {
+// gereon: the function can only pause and unpause. The doc suggests it can be more...
+rule __executeEmergencyOpWithSignatures_unsupported_chain_reverts_14(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
     // assign all the 'before' variables
     uint8 message_chainID_before = message.chainID;
-    bool committee_config_e__isChainSupported_e__message_chainID_before__before = currentContract.committee.config(e).isChainSupported(e, message_chainID_before);
+    bool isChainSupported_before = currentContract.committee.config(e).isChainSupported(e, message_chainID_before);
 
     // call function under test
     executeEmergencyOpWithSignatures@withrevert(e, signatures, message);
@@ -382,34 +356,7 @@ rule executeEmergencyOpWithSignatures_unsupported_chain_reverts_14(env e) {
     // assign all the 'after' variables
 
     // verify integrity
-    assert (!(committee_config_e__isChainSupported_e__message_chainID_before__before) => executeEmergencyOpWithSignatures_reverted);
-}
-
-/*
- * !isTransferProcessed[message.nonce]@before => isTransferProcessed[message.nonce]@after
- *
- * What it means: When a valid emergency operation is executed, the message nonce must be marked as processed in the isTransferProcessed mapping
- *
- * Why it should hold: This prevents replay attacks by ensuring each emergency operation can only be executed once. The nonce tracking is essential for maintaining operation uniqueness
- *
- * Possible consequences: If nonces aren't marked as processed, the same emergency operation could be replayed multiple times, leading to unintended repeated state changes
- */
-rule executeEmergencyOpWithSignatures_marks_nonce_as_processed_15(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    uint64 message_nonce_before = message.nonce;
-    bool isTransferProcessed_message_nonce_before__before = currentContract.isTransferProcessed[message_nonce_before];
-
-    // call function under test
-    executeEmergencyOpWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    bool isTransferProcessed_message_nonce_before__after = currentContract.isTransferProcessed[message_nonce_before];
-
-    // verify integrity
-    assert (!(isTransferProcessed_message_nonce_before__before) => isTransferProcessed_message_nonce_before__after);
+    assert (!(isChainSupported_before) => executeEmergencyOpWithSignatures_reverted);
 }
 
 /*
@@ -691,24 +638,25 @@ rule bridgeERC20_unsupported_chain_reverts_25(env e) {
  *
  * Possible consequences: Bypass of security controls, large-scale fund drainage, and potential bridge insolvency during attacks
  */
-rule bridgeERC20_exceeds_limit_reverts_26(env e) {
-    uint8 tokenID;
-    uint256 amount;
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    bool limiter_willAmountExceedLimit_e__destinationChainID__tokenID__amount__before = currentContract.limiter.willAmountExceedLimit(e, destinationChainID, tokenID, amount);
-
-    // call function under test
-    bridgeERC20@withrevert(e, tokenID, amount, recipientAddress, destinationChainID);
-    bool bridgeERC20_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert (limiter_willAmountExceedLimit_e__destinationChainID__tokenID__amount__before => bridgeERC20_reverted);
-}
+// gereon: the limit is checked in transferBridgedTokensWithSignatures, not here
+//rule bridgeERC20_exceeds_limit_reverts_26(env e) {
+//    uint8 tokenID;
+//    uint256 amount;
+//    bytes recipientAddress;
+//    uint8 destinationChainID;
+//
+//    // assign all the 'before' variables
+//    bool willAmountExceedLimit_before = currentContract.limiter.willAmountExceedLimit(e, destinationChainID, tokenID, amount);
+//
+//    // call function under test
+//    bridgeERC20@withrevert(e, tokenID, amount, recipientAddress, destinationChainID);
+//    bool bridgeERC20_reverted = lastReverted;
+//
+//    // assign all the 'after' variables
+//
+//    // verify integrity
+//    assert (willAmountExceedLimit_before => bridgeERC20_reverted);
+//}
 
 /*
  * IERC20(committee.config().tokenAddressOf(tokenID)).allowance(msg.sender, address(this)) < amount => revert
@@ -877,7 +825,13 @@ rule bridgeERC20_nonce_increments_on_success_31(env e) {
  *
  * Possible consequences: Nonce sequence corruption, failed cross-chain message processing, and potential bridge operation failures
  */
-rule bridgeERC20_no_nonce_change_on_revert_32(env e) {
+// gereon: this means to say "revert => something doesn't change". (a) instead
+// of checking whether it reverts, it attempts to remodel all revert conditions,
+// which is apparently not entirely correct. (b) it feels like a fundamental
+// property of the whole ecosystem, so it might not make sense to check it in
+// the first place?
+// there are a couple of other rules with this problem
+rule __bridgeERC20_no_nonce_change_on_revert_32(env e) {
     uint8 tokenID;
     uint256 amount;
     bytes recipientAddress;
@@ -885,10 +839,9 @@ rule bridgeERC20_no_nonce_change_on_revert_32(env e) {
 
     // assign all the 'before' variables
     bool paused_e__before = paused(e);
-    address committee_config_e__tokenAddressOf_e__tokenID__before = currentContract.committee.config(e).tokenAddressOf(e, tokenID);
-    uint256 recipientAddress_length_before = recipientAddress.length;
-    bool committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
-    bool limiter_willAmountExceedLimit_e__destinationChainID__tokenID__amount__before = currentContract.limiter.willAmountExceedLimit(e, destinationChainID, tokenID, amount);
+    address tokenAddressOf_before = currentContract.committee.config(e).tokenAddressOf(e, tokenID);
+    bool isChainSupported_before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
+    bool willAmountExceedLimit_before = currentContract.limiter.willAmountExceedLimit(e, destinationChainID, tokenID, amount);
     uint64 nonces_0__before = currentContract.nonces[0];
 
     // call function under test
@@ -898,7 +851,7 @@ rule bridgeERC20_no_nonce_change_on_revert_32(env e) {
     uint64 nonces_0__after = currentContract.nonces[0];
 
     // verify integrity
-    assert (((((((amount <= 0) || paused_e__before) || (committee_config_e__tokenAddressOf_e__tokenID__before == 0)) || (recipientAddress_length_before != 32)) || !(committee_config_e__isChainSupported_e__destinationChainID__before)) || limiter_willAmountExceedLimit_e__destinationChainID__tokenID__amount__before) => (nonces_0__after == nonces_0__before));
+    assert (((((((amount <= 0) || paused_e__before) || (tokenAddressOf_before == 0)) || (recipientAddress.length != 32)) || !(isChainSupported_before)) || willAmountExceedLimit_before) => (nonces_0__after == nonces_0__before));
 }
 
 /*
@@ -1546,12 +1499,13 @@ rule executeEmergencyOpWithSignatures_a6f740f6_wrong_message_type_reverts(env e)
  *
  * Possible consequences: Replay attacks where the same emergency operation is executed multiple times, leading to inconsistent state, multiple pausing/unpausing cycles, or repeated execution of critical operations
  */
-rule executeEmergencyOpWithSignatures_a6f740f6_processed_nonce_reverts(env e) {
+// gereon: executeEmergencyOpWithSignatures does not check isTransferProcessed. Maybe it should?
+rule __executeEmergencyOpWithSignatures_a6f740f6_processed_nonce_reverts(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
     // assign all the 'before' variables
-    bool currentContract_isTransferProcessed_message_nonce__before = currentContract.isTransferProcessed[message.nonce];
+    bool isTransferProcessed_before = currentContract.isTransferProcessed[message.nonce];
 
     // call function under test
     executeEmergencyOpWithSignatures@withrevert(e, signatures, message);
@@ -1560,7 +1514,7 @@ rule executeEmergencyOpWithSignatures_a6f740f6_processed_nonce_reverts(env e) {
     // assign all the 'after' variables
 
     // verify integrity
-    assert (currentContract_isTransferProcessed_message_nonce__before => executeEmergencyOpWithSignatures_reverted), "isTransferProcessed[message.nonce]@before => revert";
+    assert (isTransferProcessed_before => executeEmergencyOpWithSignatures_reverted), "isTransferProcessed[message.nonce]@before => revert";
 }
 
 /*
@@ -1572,7 +1526,8 @@ rule executeEmergencyOpWithSignatures_a6f740f6_processed_nonce_reverts(env e) {
  *
  * Possible consequences: Without marking nonces as processed, the same emergency operation could be replayed indefinitely, leading to repeated execution of critical operations and potential system instability
  */
-rule executeEmergencyOpWithSignatures_a6f740f6_marks_nonce_processed(env e) {
+// gereon: executeEmergencyOpWithSignatures does not set isTransferProcessed. Maybe it should?
+rule __executeEmergencyOpWithSignatures_a6f740f6_marks_nonce_processed(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
 
@@ -2099,13 +2054,14 @@ rule bridgeETH_9449ebd2_paused_reverts(env e) {
  *
  * Possible consequences: Nonce collision attacks, replay attacks, message ordering issues, and potential double-spending on the destination chain
  */
+// TODO: I suspect the generic payable().call{} always reverts...
 rule bridgeETH_9449ebd2_valid_transfer_increments_nonce(env e) {
     bytes recipientAddress;
     uint8 destinationChainID;
 
     // assign all the 'before' variables
     bool paused_e__before = paused(e);
-    bool currentContract_committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
+    bool isChainSupported_before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
     uint64 currentContract_nonces_0__before = currentContract.nonces[0];
 
     // call function under test
@@ -2115,7 +2071,7 @@ rule bridgeETH_9449ebd2_valid_transfer_increments_nonce(env e) {
     uint64 currentContract_nonces_0__after = currentContract.nonces[0];
 
     // verify integrity
-    assert (((((e.msg.value > 0) && (recipientAddress.length == 32)) && !(paused_e__before)) && currentContract_committee_config_e__isChainSupported_e__destinationChainID__before) => (currentContract_nonces_0__after == currentContract_nonces_0__before + 1)), "msg.value > 0 && recipientAddress.length == 32 && !paused()@before && committee@before.config().isChainSupported(destinationChainID) => nonces[0]@after == nonces[0]@before + 1";
+    assert (((((e.msg.value > 0) && (recipientAddress.length == 32)) && !(paused_e__before)) && isChainSupported_before) => (currentContract_nonces_0__after == currentContract_nonces_0__before + 1)), "msg.value > 0 && recipientAddress.length == 32 && !paused()@before && committee@before.config().isChainSupported(destinationChainID) => nonces[0]@after == nonces[0]@before + 1";
 }
 
 /*
@@ -2155,7 +2111,8 @@ rule bridgeETH_9449ebd2_vault_receives_eth(env e) {
  *
  * Possible consequences: Nonce sequence corruption, message processing issues, and potential synchronization problems between chains
  */
-rule bridgeETH_9449ebd2_nonce_unchanged_on_revert(env e) {
+// gereon: always reverts on purpose?
+rule __bridgeETH_9449ebd2_nonce_unchanged_on_revert(env e) {
     bytes recipientAddress;
     uint8 destinationChainID;
 
