@@ -2,6 +2,8 @@ import "dispatching_BridgeCommittee.spec";
 import "snippet_BridgeUtils.spec";
 import "snippet_uups.spec";
 
+using BridgeUtilsHarness as BridgeUtils;
+
 /*
  * minStakeRequired == 0 => revert
  *
@@ -595,4 +597,679 @@ rule updateBlocklistWithSignatures_config_unchanged_17(env e) {
 
     // verify integrity
     assert (config_after == config_before);
+}
+
+/*
+ * committee.length != stake.length => revert
+ *
+ * What it means: The function must revert if the committee array and stake array have different lengths
+ *
+ * Why it should hold: The function needs to pair each committee member with their corresponding stake amount. Mismatched array lengths would cause out-of-bounds access or incorrect stake assignments
+ *
+ * Possible consequences: State corruption where committee members get assigned wrong stakes, or array access violations leading to unpredictable behavior
+ */
+rule initialize_409ac647_arrays_length_mismatch_reverts(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize@withrevert(e, committee, stake, minStakeRequired);
+    bool initialize_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((committee.length != stake.length) => initialize_reverted), "committee.length != stake.length => revert";
+}
+
+/*
+ * committee.length == 0 => revert
+ *
+ * What it means: The function must revert if no committee members are provided (empty arrays)
+ *
+ * Why it should hold: A bridge committee with zero members cannot validate any signatures, making the bridge completely non-functional
+ *
+ * Possible consequences: Complete bridge shutdown where no operations can be validated, effectively freezing all bridge functionality
+ */
+rule initialize_409ac647_empty_committee_reverts(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize@withrevert(e, committee, stake, minStakeRequired);
+    bool initialize_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((committee.length == 0) => initialize_reverted), "committee.length == 0 => revert";
+}
+
+/*
+ * minStakeRequired == 0 => revert
+ *
+ * What it means: The function must revert if the minimum stake requirement is set to zero
+ *
+ * Why it should hold: A zero minimum stake requirement would allow any message to be approved without any committee member signatures, completely bypassing security
+ *
+ * Possible consequences: Complete security bypass where any bridge operation can be executed without proper authorization
+ */
+rule initialize_409ac647_zero_min_stake_reverts(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize@withrevert(e, committee, stake, minStakeRequired);
+    bool initialize_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((minStakeRequired == 0) => initialize_reverted), "minStakeRequired == 0 => revert";
+}
+
+/*
+ * blocklist[addr]@after == blocklist[addr]@before
+ *
+ * What it means: The initialize function should not modify the blocklist mapping for any address
+ *
+ * Why it should hold: Initialize is meant to set up the committee structure, not manage blocklists. Blocklist changes should only happen through dedicated blocklist management functions
+ *
+ * Possible consequences: Unauthorized blocklist modifications that could either unblock malicious actors or block legitimate committee members
+ */
+rule initialize_409ac647_blocklist_remains_unchanged(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+    address addr;
+
+    // assign all the 'before' variables
+    bool currentContract_blocklist_addr__before = currentContract.blocklist[addr];
+
+    // call function under test
+    initialize(e, committee, stake, minStakeRequired);
+
+    // assign all the 'after' variables
+    bool currentContract_blocklist_addr__after = currentContract.blocklist[addr];
+
+    // verify integrity
+    assert (currentContract_blocklist_addr__after == currentContract_blocklist_addr__before), "blocklist[addr]@after == blocklist[addr]@before";
+}
+
+/*
+ * config@after == config@before
+ *
+ * What it means: The initialize function should not modify the config contract address
+ *
+ * Why it should hold: The config is set separately via initializeConfig and should not be modified during committee initialization to maintain separation of concerns
+ *
+ * Possible consequences: Unauthorized config changes that could redirect bridge operations to malicious contracts
+ */
+rule initialize_409ac647_config_remains_unchanged(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+    address currentContract_config_before = currentContract.config;
+
+    // call function under test
+    initialize(e, committee, stake, minStakeRequired);
+
+    // assign all the 'after' variables
+    address currentContract_config_after = currentContract.config;
+
+    // verify integrity
+    assert (currentContract_config_after == currentContract_config_before), "config@after == config@before";
+}
+
+/*
+ * committee.length > 255 => revert
+ *
+ * What it means: The function must revert if more than 255 committee members are provided
+ *
+ * Why it should hold: The committeeIndex mapping uses uint8 which can only store values 0-255, so having more members would cause index overflow
+ *
+ * Possible consequences: Index overflow causing multiple committee members to have the same index, breaking signature verification logic
+ */
+rule initialize_409ac647_committee_too_large_reverts(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize@withrevert(e, committee, stake, minStakeRequired);
+    bool initialize_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((committee.length > 255) => initialize_reverted), "committee.length > 255 => revert";
+}
+
+/*
+ * stake[0] > 65535 => revert
+ *
+ * What it means: The function must revert if any stake amount exceeds the uint16 maximum value (65535)
+ *
+ * Why it should hold: The committeeStake mapping uses uint16 to store stake amounts, so values above 65535 would overflow and be stored incorrectly
+ *
+ * Possible consequences: Stake amount truncation where high-stake members appear to have very low stakes, undermining security thresholds
+ */
+rule initialize_409ac647_stake_overflow_reverts(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize@withrevert(e, committee, stake, minStakeRequired);
+    bool initialize_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((stake[0] > 65535) => initialize_reverted), "stake[0] > 65535 => revert";
+}
+
+/*
+ * committee.length > 0 && committee.length == stake.length && minStakeRequired > 0 => committeeStake[committee[0]]@after == stake[0]
+ *
+ * What it means: When initialization parameters are valid, the first committee member's stake should be correctly stored
+ *
+ * Why it should hold: This verifies that the core functionality of storing committee member stakes works correctly for valid inputs
+ *
+ * Possible consequences: Committee members having incorrect stakes, leading to wrong signature validation thresholds
+ */
+rule initialize_409ac647_valid_setup_updates_stake(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize(e, committee, stake, minStakeRequired);
+
+    // assign all the 'after' variables
+    uint16 currentContract_committeeStake_committee_0___after = currentContract.committeeStake[committee[0]];
+
+    // verify integrity
+    assert ((((committee.length > 0) && (committee.length == stake.length)) && (minStakeRequired > 0)) => (currentContract_committeeStake_committee_0___after == stake[0])), "committee.length > 0 && committee.length == stake.length && minStakeRequired > 0 => committeeStake[committee[0]]@after == stake[0]";
+}
+
+/*
+ * committee.length > 0 && committee.length == stake.length && minStakeRequired > 0 => committeeIndex[committee[0]]@after == 0
+ *
+ * What it means: When initialization parameters are valid, the first committee member should be assigned index 0
+ *
+ * Why it should hold: The index system is used in signature verification to prevent duplicate signatures via bitmap checking
+ *
+ * Possible consequences: Broken duplicate signature detection allowing signature replay attacks
+ */
+rule initialize_409ac647_valid_setup_updates_index(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize(e, committee, stake, minStakeRequired);
+
+    // assign all the 'after' variables
+    uint8 currentContract_committeeIndex_committee_0___after = currentContract.committeeIndex[committee[0]];
+
+    // verify integrity
+    assert ((((committee.length > 0) && (committee.length == stake.length)) && (minStakeRequired > 0)) => (currentContract_committeeIndex_committee_0___after == 0)), "committee.length > 0 && committee.length == stake.length && minStakeRequired > 0 => committeeIndex[committee[0]]@after == 0";
+}
+
+/*
+ * committee.length > 1 && committee.length == stake.length && minStakeRequired > 0 => committeeStake[committee[1]]@after == stake[1]
+ *
+ * What it means: When there are multiple committee members, the second member's stake should be correctly stored
+ *
+ * Why it should hold: This ensures the stake assignment logic works correctly for all committee members, not just the first one
+ *
+ * Possible consequences: Incorrect stake assignments for committee members beyond the first, undermining signature validation
+ */
+rule initialize_409ac647_second_member_stake_set(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize(e, committee, stake, minStakeRequired);
+
+    // assign all the 'after' variables
+    uint16 currentContract_committeeStake_committee_1___after = currentContract.committeeStake[committee[1]];
+
+    // verify integrity
+    assert ((((committee.length > 1) && (committee.length == stake.length)) && (minStakeRequired > 0)) => (currentContract_committeeStake_committee_1___after == stake[1])), "committee.length > 1 && committee.length == stake.length && minStakeRequired > 0 => committeeStake[committee[1]]@after == stake[1]";
+}
+
+/*
+ * committee.length > 1 && committee.length == stake.length && minStakeRequired > 0 => committeeIndex[committee[1]]@after == 1
+ *
+ * What it means: When there are multiple committee members, the second member should be assigned index 1
+ *
+ * Why it should hold: This ensures the index assignment logic works correctly for all committee members in sequence
+ *
+ * Possible consequences: Incorrect index assignments leading to broken duplicate signature detection
+ */
+rule initialize_409ac647_second_member_index_set(env e) {
+    address[] committee;
+    uint16[] stake;
+    uint16 minStakeRequired;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initialize(e, committee, stake, minStakeRequired);
+
+    // assign all the 'after' variables
+    uint8 currentContract_committeeIndex_committee_1___after = currentContract.committeeIndex[committee[1]];
+
+    // verify integrity
+    assert ((((committee.length > 1) && (committee.length == stake.length)) && (minStakeRequired > 0)) => (currentContract_committeeIndex_committee_1___after == 1)), "committee.length > 1 && committee.length == stake.length && minStakeRequired > 0 => committeeIndex[committee[1]]@after == 1";
+}
+
+/*
+ * config@before != address(0) => revert
+ *
+ * What it means: The function must revert if the config address has already been set to a non-zero value
+ *
+ * Why it should hold: Based on the function name 'initializeConfig' and the docstring stating it should be called 'directly after config deployment', this appears to be a one-time initialization function that should prevent re-initialization
+ *
+ * Possible consequences: State corruption, unauthorized config changes, breaking of initialization invariants
+ */
+rule initializeConfig_c8f55287_config_already_set(env e) {
+    address _config;
+
+    // assign all the 'before' variables
+    address currentContract_config_before = currentContract.config;
+
+    // call function under test
+    initializeConfig@withrevert(e, _config);
+    bool initializeConfig_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((currentContract_config_before != 0) => initializeConfig_reverted), "config@before != address(0) => revert";
+}
+
+/*
+ * _config == address(0) => revert
+ *
+ * What it means: The function must revert if the provided config address parameter is the zero address
+ *
+ * Why it should hold: Setting config to zero address would make the contract non-functional since config is likely used for critical bridge operations, and zero address is typically invalid for contract references
+ *
+ * Possible consequences: DoS of bridge functionality, inability to perform config-dependent operations
+ */
+rule initializeConfig_c8f55287_invalid_config_address(env e) {
+    address _config;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    initializeConfig@withrevert(e, _config);
+    bool initializeConfig_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((_config == 0) => initializeConfig_reverted), "_config == address(0) => revert";
+}
+
+/*
+ * _config != address(0) && config@before == address(0) => config@after == _config
+ *
+ * What it means: When a valid non-zero config address is provided and config was previously unset, the config storage variable should be updated to the provided address
+ *
+ * Why it should hold: This is the core functionality of the initialization - it should actually set the config when called with valid parameters for the first time
+ *
+ * Possible consequences: Bridge malfunction, inability to access configuration parameters
+ */
+rule initializeConfig_c8f55287_valid_config_sets_storage(env e) {
+    address _config;
+
+    // assign all the 'before' variables
+    address currentContract_config_before = currentContract.config;
+
+    // call function under test
+    initializeConfig(e, _config);
+
+    // assign all the 'after' variables
+    address currentContract_config_after = currentContract.config;
+
+    // verify integrity
+    assert (((_config != 0) && (currentContract_config_before == 0)) => (currentContract_config_after == _config)), "_config != address(0) && config@before == address(0) => config@after == _config";
+}
+
+/*
+ * msg.sender != committee@before => revert
+ *
+ * What it means: Only the committee address can call this initialization function
+ *
+ * Why it should hold: Configuration initialization is a privileged operation that should be restricted to authorized parties, and the committee appears to be the governance entity in this bridge system
+ *
+ * Possible consequences: Unauthorized configuration changes, governance bypass, potential fund loss
+ */
+rule initializeConfig_c8f55287_only_committee_can_initialize(env e) {
+    address _config;
+
+    // assign all the 'before' variables
+    address currentContract_committee_before = currentContract.committee;
+
+    // call function under test
+    initializeConfig@withrevert(e, _config);
+    bool initializeConfig_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((e.msg.sender != currentContract_committee_before) => initializeConfig_reverted), "msg.sender != committee@before => revert";
+}
+
+/*
+ * config@before != address(0) => config@after == config@before
+ *
+ * What it means: If config is already set to a non-zero value, it should remain unchanged after the function call
+ *
+ * Why it should hold: This ensures that even if the function doesn't revert when config is already set, it won't corrupt the existing configuration
+ *
+ * Possible consequences: Configuration corruption, unexpected behavior in bridge operations
+ */
+rule initializeConfig_c8f55287_config_unchanged_if_set(env e) {
+    address _config;
+
+    // assign all the 'before' variables
+    address currentContract_config_before = currentContract.config;
+
+    // call function under test
+    initializeConfig(e, _config);
+
+    // assign all the 'after' variables
+    address currentContract_config_after = currentContract.config;
+
+    // verify integrity
+    assert ((currentContract_config_before != 0) => (currentContract_config_after == currentContract_config_before)), "config@before != address(0) => config@after == config@before";
+}
+
+/*
+ * signatures.length == 0 => revert
+ *
+ * What it means: The function must revert if no signatures are provided in the signatures array
+ *
+ * Why it should hold: An empty signatures array means no committee members have approved the blocklist update, which violates the multi-signature requirement for critical operations
+ *
+ * Possible consequences: Unauthorized blocklist updates without any committee approval, allowing malicious actors to manipulate the blocklist state
+ */
+rule updateBlocklistWithSignatures_f6f66e98_empty_signatures_revert(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    updateBlocklistWithSignatures@withrevert(e, signatures, message);
+    bool updateBlocklistWithSignatures_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((signatures.length == 0) => updateBlocklistWithSignatures_reverted), "signatures.length == 0 => revert";
+}
+
+/*
+ * message.messageType != BridgeUtils.BLOCKLIST => revert
+ *
+ * What it means: The function must revert if the message type is not BridgeUtils.BLOCKLIST
+ *
+ * Why it should hold: This function is specifically designed to handle blocklist updates only, and processing other message types would be a logical error
+ *
+ * Possible consequences: Processing inappropriate message types could lead to incorrect state changes or bypass intended access controls for other operations
+ */
+rule updateBlocklistWithSignatures_f6f66e98_invalid_message_type_revert(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    updateBlocklistWithSignatures@withrevert(e, signatures, message);
+    bool updateBlocklistWithSignatures_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((message.messageType != BridgeUtils.BLOCKLIST(e)) => updateBlocklistWithSignatures_reverted), "message.messageType != BridgeUtils.BLOCKLIST => revert";
+}
+
+/*
+ * signatures[i].length != 65 => revert
+ *
+ * What it means: The function must revert if any signature in the array is not exactly 65 bytes long
+ *
+ * Why it should hold: ECDSA signatures must be exactly 65 bytes (32 bytes r + 32 bytes s + 1 byte v), and invalid lengths indicate malformed signatures
+ *
+ * Possible consequences: Processing malformed signatures could lead to signature verification bypass or unexpected behavior in cryptographic operations
+ */
+rule updateBlocklistWithSignatures_f6f66e98_invalid_signature_length_revert(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+    uint256 i;
+
+    // assign all the 'before' variables
+
+    // call function under test
+    updateBlocklistWithSignatures@withrevert(e, signatures, message);
+    bool updateBlocklistWithSignatures_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((signatures[i].length != 65) => updateBlocklistWithSignatures_reverted), "signatures[i].length != 65 => revert";
+}
+
+/*
+ * message.nonce != nonces[message.chainID]@before => revert
+ *
+ * What it means: The function must revert if the message nonce does not match the expected nonce for the given chain ID
+ *
+ * Why it should hold: Nonces prevent replay attacks by ensuring each message can only be processed once in the correct order
+ *
+ * Possible consequences: Replay attacks where old blocklist update messages are reused, or out-of-order message processing leading to inconsistent state
+ */
+rule updateBlocklistWithSignatures_f6f66e98_invalid_nonce_revert(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+
+    // assign all the 'before' variables
+    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.chainID];
+
+    // call function under test
+    updateBlocklistWithSignatures@withrevert(e, signatures, message);
+    bool updateBlocklistWithSignatures_reverted = lastReverted;
+
+    // assign all the 'after' variables
+
+    // verify integrity
+    assert ((message.nonce != currentContract_nonces_message_chainID__before) => updateBlocklistWithSignatures_reverted), "message.nonce != nonces[message.chainID]@before => revert";
+}
+
+/*
+ * nonces[message.chainID]@after == nonces[message.chainID]@before + 1
+ *
+ * What it means: After successful execution, the nonce for the message's chain ID must be incremented by exactly 1
+ *
+ * Why it should hold: Proper nonce management ensures message ordering and prevents replay attacks by advancing the expected nonce
+ *
+ * Possible consequences: Nonce desynchronization could allow replay attacks or prevent legitimate future messages from being processed
+ */
+rule updateBlocklistWithSignatures_f6f66e98_nonce_incremented(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+
+    // assign all the 'before' variables
+    uint64 currentContract_nonces_message_chainID__before = currentContract.nonces[message.chainID];
+
+    // call function under test
+    updateBlocklistWithSignatures(e, signatures, message);
+
+    // assign all the 'after' variables
+    uint64 currentContract_nonces_message_chainID__after = currentContract.nonces[message.chainID];
+
+    // verify integrity
+    assert (currentContract_nonces_message_chainID__after == currentContract_nonces_message_chainID__before + 1), "nonces[message.chainID]@after == nonces[message.chainID]@before + 1";
+}
+
+/*
+ * committeeStake[addr]@after == committeeStake[addr]@before
+ *
+ * What it means: The committee stake mapping must remain unchanged after blocklist updates
+ *
+ * Why it should hold: Blocklist updates should only modify the blocklist mapping, not affect committee members' stake amounts
+ *
+ * Possible consequences: Unintended modification of stake amounts could disrupt the voting power balance and compromise the security model
+ */
+rule updateBlocklistWithSignatures_f6f66e98_committee_stake_unchanged(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+    address addr;
+
+    // assign all the 'before' variables
+    uint16 currentContract_committeeStake_addr__before = currentContract.committeeStake[addr];
+
+    // call function under test
+    updateBlocklistWithSignatures(e, signatures, message);
+
+    // assign all the 'after' variables
+    uint16 currentContract_committeeStake_addr__after = currentContract.committeeStake[addr];
+
+    // verify integrity
+    assert (currentContract_committeeStake_addr__after == currentContract_committeeStake_addr__before), "committeeStake[addr]@after == committeeStake[addr]@before";
+}
+
+/*
+ * committeeIndex[addr]@after == committeeIndex[addr]@before
+ *
+ * What it means: The committee index mapping must remain unchanged after blocklist updates
+ *
+ * Why it should hold: Blocklist updates should only modify the blocklist status, not affect the positional indices of committee members
+ *
+ * Possible consequences: Changing committee indices could break signature verification logic that relies on these indices for duplicate detection
+ */
+rule updateBlocklistWithSignatures_f6f66e98_committee_index_unchanged(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+    address addr;
+
+    // assign all the 'before' variables
+    uint8 currentContract_committeeIndex_addr__before = currentContract.committeeIndex[addr];
+
+    // call function under test
+    updateBlocklistWithSignatures(e, signatures, message);
+
+    // assign all the 'after' variables
+    uint8 currentContract_committeeIndex_addr__after = currentContract.committeeIndex[addr];
+
+    // verify integrity
+    assert (currentContract_committeeIndex_addr__after == currentContract_committeeIndex_addr__before), "committeeIndex[addr]@after == committeeIndex[addr]@before";
+}
+
+/*
+ * config@after == config@before
+ *
+ * What it means: The config contract address must remain unchanged after blocklist updates
+ *
+ * Why it should hold: Blocklist updates should not modify the bridge configuration, which is a separate concern managed through different mechanisms
+ *
+ * Possible consequences: Unauthorized config changes could redirect the bridge to use malicious configuration parameters
+ */
+rule updateBlocklistWithSignatures_f6f66e98_config_unchanged(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+
+    // assign all the 'before' variables
+    address currentContract_config_before = currentContract.config;
+
+    // call function under test
+    updateBlocklistWithSignatures(e, signatures, message);
+
+    // assign all the 'after' variables
+    address currentContract_config_after = currentContract.config;
+
+    // verify integrity
+    assert (currentContract_config_after == currentContract_config_before), "config@after == config@before";
+}
+
+/*
+ * blocklist[addr]@after != blocklist[addr]@before => true
+ *
+ * What it means: The blocklist mapping is allowed to change for any address during execution
+ *
+ * Why it should hold: This property acknowledges that the primary purpose of this function is to update the blocklist status of addresses
+ *
+ * Possible consequences: If blocklist changes are prevented, the function cannot fulfill its intended purpose
+ */
+rule updateBlocklistWithSignatures_f6f66e98_blocklist_changes(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+    address addr;
+
+    // assign all the 'before' variables
+    bool currentContract_blocklist_addr__before = currentContract.blocklist[addr];
+
+    // call function under test
+    updateBlocklistWithSignatures(e, signatures, message);
+
+    // assign all the 'after' variables
+    bool currentContract_blocklist_addr__after = currentContract.blocklist[addr];
+
+    // verify integrity
+    assert ((currentContract_blocklist_addr__after != currentContract_blocklist_addr__before) => true), "blocklist[addr]@after != blocklist[addr]@before => true";
+}
+
+/*
+ * chainID != message.chainID => nonces[chainID]@after == nonces[chainID]@before
+ *
+ * What it means: Nonces for chain IDs other than the message's chain ID must remain unchanged
+ *
+ * Why it should hold: Each chain should have independent nonce tracking, and processing a message for one chain should not affect nonces for other chains
+ *
+ * Possible consequences: Cross-chain nonce interference could disrupt message processing for other chains or create synchronization issues
+ */
+rule updateBlocklistWithSignatures_f6f66e98_other_nonces_unchanged(env e) {
+    bytes[] signatures;
+    BridgeUtils.Message message;
+    uint8 chainID;
+
+    // assign all the 'before' variables
+    uint64 currentContract_nonces_chainID__before = currentContract.nonces[chainID];
+
+    // call function under test
+    updateBlocklistWithSignatures(e, signatures, message);
+
+    // assign all the 'after' variables
+    uint64 currentContract_nonces_chainID__after = currentContract.nonces[chainID];
+
+    // verify integrity
+    assert ((chainID != message.chainID) => (currentContract_nonces_chainID__after == currentContract_nonces_chainID__before)), "chainID != message.chainID => nonces[chainID]@after == nonces[chainID]@before";
 }
