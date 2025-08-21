@@ -206,6 +206,7 @@ rule updateBlocklistWithSignatures_message_type_must_match_11(env e) {
  *
  * Possible consequences: Compromised governance if blocklisted members can still influence decisions, potential for malicious actors to maintain control
  */
+// gereon: nice idea, but it's not easy to extract the signer from the message (and the AI didn't even attempt to do it...)
 rule updateBlocklistWithSignatures_blocklisted_signer_reverts_12(env e) {
     // Declare variables
     bytes[] signatures;
@@ -235,15 +236,16 @@ rule updateBlocklistWithSignatures_blocklisted_signer_reverts_12(env e) {
  *
  * Possible consequences: Unauthorized addresses can participate in bridge operations, signature verification accepts invalid signers
  */
+// gereon: nice idea, but the AI had no idea how to implement this
 rule initialize_non_committee_has_zero_stake_8(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
-    uint256 i;
     address addr;
 
     // assign all the 'before' variables
-    address committee_i__before = committee[i];
+    require(forall uint256 j. (0 < j && j < committee.length) => (addr != committee[j]));
+    require(currentContract.committeeStake[addr] == 0);
 
     // call function under test
     initialize(e, committee, stake, minStakeRequired);
@@ -252,7 +254,7 @@ rule initialize_non_committee_has_zero_stake_8(env e) {
     uint16 committeeStake_addr__after = currentContract.committeeStake[addr];
 
     // verify integrity
-    assert ((addr != committee_i__before) => (committeeStake_addr__after == 0));
+    assert (committeeStake_addr__after == 0);
 }
 
 /*
@@ -293,7 +295,8 @@ rule initialize_committee_stake_set_correctly_6(env e) {
  *
  * Possible consequences: Unauthorized governance participation by non-committee members, dilution of legitimate committee voting power
  */
-rule updateBlocklistWithSignatures_no_stake_signer_reverts_13(env e) {
+// gereon: nice idea, but it's not easy to extract the signer from the message (and the AI didn't even attempt to do it...)
+rule __updateBlocklistWithSignatures_no_stake_signer_reverts_13(env e) {
     // Declare variables
     bytes[] signatures;
     BridgeUtils.Message message;
