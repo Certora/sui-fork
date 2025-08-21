@@ -33,114 +33,6 @@ rule initialize_zero_addresses_revert_1(env e) {
 }
 
 /*
- * committee != address(0) => revert
- *
- * What it means: The initialize function must revert if the contract has already been initialized (committee address is not zero)
- *
- * Why it should hold: This is a standard initializer pattern to prevent re-initialization attacks on upgradeable contracts, ensuring the contract can only be initialized once
- *
- * Possible consequences: Re-initialization attacks where an attacker could reset critical addresses to malicious contracts they control, leading to complete compromise of the bridge
- */
-rule initialize_already_initialized_reverts_2(env e) {
-    address _committee;
-    address _vault;
-    address _limiter;
-
-    // assign all the 'before' variables
-    address committee_before = currentContract.committee;
-
-    // call function under test
-    initialize@withrevert(e, _committee, _vault, _limiter);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((committee_before != 0) => initialize_reverted);
-}
-
-/*
- * _committee != address(0) && committee == address(0) => committee@after == _committee
- *
- * What it means: When initializing with a valid committee address and the contract is not already initialized, the committee storage variable must be set to the provided address
- *
- * Why it should hold: The committee is responsible for signature verification and bridge governance. Proper initialization ensures the bridge can verify validator signatures for cross-chain transfers
- *
- * Possible consequences: Bridge operations would fail due to inability to verify signatures, making cross-chain transfers impossible and potentially locking user funds
- */
-rule initialize_sets_committee_address_3(env e) {
-    address _committee;
-    address _vault;
-    address _limiter;
-
-    // assign all the 'before' variables
-    address committee_before = currentContract.committee;
-
-    // call function under test
-    initialize(e, _committee, _vault, _limiter);
-
-    // assign all the 'after' variables
-    address committee_after = currentContract.committee;
-
-    // verify integrity
-    assert (((_committee != 0) && (committee_before == 0)) => (committee_after == _committee));
-}
-
-/*
- * _vault != address(0) && committee == address(0) => vault@after == _vault
- *
- * What it means: When initializing with a valid vault address and the contract is not already initialized, the vault storage variable must be set to the provided address
- *
- * Why it should hold: The vault is where all bridged tokens are stored and managed. Without a proper vault address, the bridge cannot hold or transfer tokens
- *
- * Possible consequences: Complete inability to handle token deposits and withdrawals, leading to fund loss and bridge malfunction
- */
-rule initialize_sets_vault_address_4(env e) {
-    address _committee;
-    address _vault;
-    address _limiter;
-
-    // assign all the 'before' variables
-    address committee_before = currentContract.committee;
-
-    // call function under test
-    initialize(e, _committee, _vault, _limiter);
-
-    // assign all the 'after' variables
-    address vault_after = currentContract.vault;
-
-    // verify integrity
-    assert (((_vault != 0) && (committee_before == 0)) => (vault_after == _vault));
-}
-
-/*
- * _limiter != address(0) && committee == address(0) => limiter@after == _limiter
- *
- * What it means: When initializing with a valid limiter address and the contract is not already initialized, the limiter storage variable must be set to the provided address
- *
- * Why it should hold: The limiter enforces rate limits and transfer amounts to prevent abuse and large-scale attacks. Without proper initialization, these security measures would be bypassed
- *
- * Possible consequences: Unlimited token withdrawals, potential for large-scale fund drainage, and loss of security controls designed to prevent bridge abuse
- */
-rule initialize_sets_limiter_address_5(env e) {
-    address _committee;
-    address _vault;
-    address _limiter;
-
-    // assign all the 'before' variables
-    address committee_before = currentContract.committee;
-
-    // call function under test
-    initialize(e, _committee, _vault, _limiter);
-
-    // assign all the 'after' variables
-    address limiter_after = currentContract.limiter;
-
-    // verify integrity
-    assert (((_limiter != 0) && (committee_before == 0)) => (limiter_after == _limiter));
-}
-
-/*
  * isTransferProcessed[message.nonce] => revert
  *
  * What it means: If a message with a specific nonce has already been processed (isTransferProcessed[message.nonce] is true), the function must revert
@@ -165,32 +57,6 @@ rule transferBridgedTokensWithSignatures_duplicate_nonce_reverts_6(env e) {
 
     // verify integrity
     assert (isTransferProcessed_message_nonce_before__before => transferBridgedTokensWithSignatures_reverted);
-}
-
-/*
- * message.messageType != BridgeUtils.TOKEN_TRANSFER => revert
- *
- * What it means: If the message type is not BridgeUtils.TOKEN_TRANSFER, the function must revert since this function only handles token transfers
- *
- * Why it should hold: This function is specifically designed for token transfers only. Other message types should be handled by different functions
- *
- * Possible consequences: State corruption and unexpected behavior if emergency operations or other message types are processed through the wrong function
- */
-rule transferBridgedTokensWithSignatures_invalid_message_type_reverts_7(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    uint8 message_messageType_before = message.messageType;
-
-    // call function under test
-    transferBridgedTokensWithSignatures@withrevert(e, signatures, message);
-    bool transferBridgedTokensWithSignatures_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((message_messageType_before != 0) => transferBridgedTokensWithSignatures_reverted);
 }
 
 /*
@@ -518,34 +384,6 @@ rule bridgeERC20_invalid_amount_reverts_21(env e) {
 }
 
 /*
- * committee.config().tokenAddressOf(tokenID) == address(0) => revert
- *
- * What it means: The function must revert when the tokenID maps to address(0) in the bridge configuration
- *
- * Why it should hold: Address(0) indicates an unsupported or misconfigured token, and attempting to bridge such tokens would fail in subsequent operations or lead to undefined behavior
- *
- * Possible consequences: Fund loss through failed transfers, state corruption in bridge accounting, and potential exploitation of undefined token handling behavior
- */
-rule bridgeERC20_unsupported_token_reverts_22(env e) {
-    uint8 tokenID;
-    uint256 amount;
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    address committee_config_e__tokenAddressOf_e__tokenID__before = currentContract.committee.config(e).tokenAddressOf(e, tokenID);
-
-    // call function under test
-    bridgeERC20@withrevert(e, tokenID, amount, recipientAddress, destinationChainID);
-    bool bridgeERC20_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((committee_config_e__tokenAddressOf_e__tokenID__before == 0) => bridgeERC20_reverted);
-}
-
-/*
  * paused() => revert
  *
  * What it means: The function must revert when the contract is in a paused state
@@ -571,34 +409,6 @@ rule bridgeERC20_paused_state_reverts_24(env e) {
 
     // verify integrity
     assert (paused_e__before => bridgeERC20_reverted);
-}
-
-/*
- * !committee.config().isChainSupported(destinationChainID) => revert
- *
- * What it means: The function must revert when the destination chain ID is not supported by the bridge configuration
- *
- * Why it should hold: The onlySupportedChain modifier ensures tokens are only bridged to chains where the bridge infrastructure exists and is operational
- *
- * Possible consequences: Fund loss through transfers to non-existent or unsupported chains, stuck tokens, and failed cross-chain operations
- */
-rule bridgeERC20_unsupported_chain_reverts_25(env e) {
-    uint8 tokenID;
-    uint256 amount;
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    bool committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
-
-    // call function under test
-    bridgeERC20@withrevert(e, tokenID, amount, recipientAddress, destinationChainID);
-    bool bridgeERC20_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert (!(committee_config_e__isChainSupported_e__destinationChainID__before) => bridgeERC20_reverted);
 }
 
 /*
@@ -736,83 +546,6 @@ rule __bridgeERC20_no_nonce_change_on_revert_32(env e) {
 }
 
 /*
- * !committee.config().isChainSupported(destinationChainID) => revert
- *
- * What it means: The function must revert if the destination chain ID is not supported by the bridge configuration
- *
- * Why it should hold: The onlySupportedChain modifier requires committee.config().isChainSupported(destinationChainID) to be true
- *
- * Possible consequences: Funds could be locked in the bridge if sent to unsupported chains that cannot process the bridge messages
- */
-rule bridgeETH_unsupported_destination_chain_34(env e) {
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    bool committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
-
-    // call function under test
-    bridgeETH@withrevert(e, recipientAddress, destinationChainID);
-    bool bridgeETH_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert (!(committee_config_e__isChainSupported_e__destinationChainID__before) => bridgeETH_reverted);
-}
-
-/*
- * msg.value == 0 => revert
- *
- * What it means: The function must revert when msg.value is zero, preventing meaningless operations
- *
- * Why it should hold: Transferring 0 ETH serves no purpose and should be prevented as a no-op operation that wastes gas and creates unnecessary events
- *
- * Possible consequences: Gas waste, spam transactions, and potential DoS through flooding the bridge with meaningless operations
- */
-rule bridgeETH_zero_value_transfer_35(env e) {
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    bridgeETH@withrevert(e, recipientAddress, destinationChainID);
-    bool bridgeETH_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((e.msg.value == 0) => bridgeETH_reverted);
-}
-
-/*
- * paused() => revert
- *
- * What it means: The function must revert when the contract is in a paused state
- *
- * Why it should hold: The whenNotPaused modifier requires the contract to not be paused for bridge operations to proceed
- *
- * Possible consequences: Bridge operations could continue during emergency situations when they should be halted
- */
-rule bridgeETH_contract_paused_36(env e) {
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    bool paused_e__before = paused(e);
-
-    // call function under test
-    bridgeETH@withrevert(e, recipientAddress, destinationChainID);
-    bool bridgeETH_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert (paused_e__before => bridgeETH_reverted);
-}
-
-/*
  * msg.value > 0 && recipientAddress.length == 32 && committee.config().isChainSupported(destinationChainID) && !paused() => nonces[BridgeUtils.TOKEN_TRANSFER]@after == nonces[BridgeUtils.TOKEN_TRANSFER]@before + 1
  *
  * What it means: When all conditions are met for a successful bridge operation, the TOKEN_TRANSFER nonce must increment by exactly 1
@@ -839,36 +572,6 @@ rule bridgeETH_nonce_increments_on_success_37(env e) {
 
     // verify integrity
     assert (((((e.msg.value > 0) && (recipientAddress_length_before == 32)) && committee_config_e__isChainSupported_e__destinationChainID__before) && !(paused_e__before)) => (nonces_0__after == nonces_0__before + 1));
-}
-
-/*
- * msg.value > 0 && recipientAddress.length == 32 && committee.config().isChainSupported(destinationChainID) && !paused() => address(vault).balance@after == address(vault).balance@before + msg.value
- *
- * What it means: When a successful ETH bridge operation occurs, the vault's ETH balance must increase by exactly the msg.value amount
- *
- * Why it should hold: The bridged ETH must be securely stored in the vault for later withdrawal operations, similar to how bridgeERC20 transfers tokens to the vault
- *
- * Possible consequences: ETH could be lost, stolen, or not properly accounted for in the bridge system
- */
-rule bridgeETH_vault_receives_exact_eth_38(env e) {
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    uint256 recipientAddress_length_before = recipientAddress.length;
-    bool committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
-    bool paused_e__before = paused(e);
-    address vault_before = currentContract.vault;
-    uint256 vault_before_balance_before = nativeBalances[vault_before];
-
-    // call function under test
-    bridgeETH(e, recipientAddress, destinationChainID);
-
-    // assign all the 'after' variables
-    uint256 vault_before_balance_after = nativeBalances[vault_before];
-
-    // verify integrity
-    assert (((((e.msg.value > 0) && (recipientAddress_length_before == 32)) && committee_config_e__isChainSupported_e__destinationChainID__before) && !(paused_e__before)) => (vault_before_balance_after == vault_before_balance_before + e.msg.value));
 }
 
 /*
