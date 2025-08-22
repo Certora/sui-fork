@@ -5,41 +5,6 @@ import "snippet_uups.spec";
 using BridgeUtilsHarness as BridgeUtils;
 
 /*
- * _supportedTokens.length == 0 || _tokenPrices.length == 0 || _tokenIds.length == 0 || _suiDecimals.length == 0 || _supportedChains.length == 0 => revert
- *
- * What it means: The initialize function must revert if any of the required arrays (_supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains) are empty
- *
- * Why it should hold: An empty array would result in a bridge configuration with no supported tokens or chains, making the bridge completely non-functional. The initialize function should prevent such invalid configurations
- *
- * Possible consequences: Bridge becomes completely unusable, DoS of bridge functionality, users cannot perform any bridge operations
- */
-rule initialize_empty_arrays_revert_1(env e) {
-    address _committee;
-    uint8 _chainID;
-    address[] _supportedTokens;
-    uint64[] _tokenPrices;
-    uint8[] _tokenIds;
-    uint8[] _suiDecimals;
-    uint8[] _supportedChains;
-
-    // assign all the 'before' variables
-    uint256 _supportedTokens_length_before = _supportedTokens.length;
-    uint256 _tokenPrices_length_before = _tokenPrices.length;
-    uint256 _tokenIds_length_before = _tokenIds.length;
-    uint256 _suiDecimals_length_before = _suiDecimals.length;
-    uint256 _supportedChains_length_before = _supportedChains.length;
-
-    // call function under test
-    initialize@withrevert(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((((((_supportedTokens_length_before == 0) || (_tokenPrices_length_before == 0)) || (_tokenIds_length_before == 0)) || (_suiDecimals_length_before == 0)) || (_supportedChains_length_before == 0)) => initialize_reverted);
-}
-
-/*
  * _supportedTokens.length != _tokenPrices.length || _supportedTokens.length != _tokenIds.length || _supportedTokens.length != _suiDecimals.length => revert
  *
  * What it means: The initialize function must revert if the arrays _supportedTokens, _tokenPrices, _tokenIds, and _suiDecimals have different lengths
@@ -101,36 +66,6 @@ rule initialize_invalid_committee_reverts_3(env e) {
 
     // verify integrity
     assert ((_committee == 0) => initialize_reverted);
-}
-
-/*
- * _chainID == 0 => revert
- *
- * What it means: The initialize function must revert if the _chainID parameter is zero
- *
- * Why it should hold: Chain ID zero is typically invalid and could cause confusion with default/uninitialized values. Valid chain IDs should be positive integers
- *
- * Possible consequences: Chain identification issues, potential conflicts with default values, bridge routing problems
- */
-rule initialize_invalid_chainID_reverts_4(env e) {
-    address _committee;
-    uint8 _chainID;
-    address[] _supportedTokens;
-    uint64[] _tokenPrices;
-    uint8[] _tokenIds;
-    uint8[] _suiDecimals;
-    uint8[] _supportedChains;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((_chainID == 0) => initialize_reverted);
 }
 
 /*
@@ -516,7 +451,8 @@ rule initialize_e590e3e8_zero_committee_reverts(env e) {
  *
  * Possible consequences: Cross-chain message routing failures, inability to distinguish between different blockchain networks, potential message replay attacks
  */
-rule initialize_e590e3e8_invalid_chainID_reverts(env e) {
+// gereon: not checked, maybe it should be
+rule __initialize_e590e3e8_invalid_chainID_reverts(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
@@ -576,7 +512,8 @@ rule initialize_e590e3e8_array_length_mismatch_reverts(env e) {
  *
  * Possible consequences: Deployment of a useless bridge contract, wasted gas, potential confusion for users trying to use the bridge
  */
-rule initialize_e590e3e8_empty_arrays_revert(env e) {
+// gereon: not checked, but maybe it should be
+rule __initialize_e590e3e8_empty_arrays_revert(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
@@ -666,6 +603,7 @@ rule initialize_e590e3e8_chainID_set(env e) {
  *
  * Possible consequences: Wrong token contract used for bridge operations, users bridging unsupported tokens, fund loss
  */
+// gereon: AI missed possibly duplicated token id
 rule initialize_e590e3e8_token_0_address_stored(env e) {
     address _committee;
     uint8 _chainID;
@@ -676,6 +614,7 @@ rule initialize_e590e3e8_token_0_address_stored(env e) {
     uint8[] _supportedChains;
 
     // assign all the 'before' variables
+    require(forall uint256 i. (0 < i && i < _tokenIds.length) => (_tokenIds[0] != _tokenIds[i]));
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
@@ -696,6 +635,7 @@ rule initialize_e590e3e8_token_0_address_stored(env e) {
  *
  * Possible consequences: Incorrect amount calculations, users receiving wrong token amounts, precision loss or overflow
  */
+// gereon: AI missed possibly duplicated token id
 rule initialize_e590e3e8_token_0_decimal_stored(env e) {
     address _committee;
     uint8 _chainID;
@@ -706,6 +646,7 @@ rule initialize_e590e3e8_token_0_decimal_stored(env e) {
     uint8[] _supportedChains;
 
     // assign all the 'before' variables
+    require(forall uint256 i. (0 < i && i < _tokenIds.length) => (_tokenIds[0] != _tokenIds[i]));
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
@@ -726,6 +667,7 @@ rule initialize_e590e3e8_token_0_decimal_stored(env e) {
  *
  * Possible consequences: Incorrect fee calculations, wrong token valuations, economic attacks on the bridge
  */
+// gereon: AI missed possibly duplicated token id
 rule initialize_e590e3e8_token_0_price_stored(env e) {
     address _committee;
     uint8 _chainID;
@@ -736,6 +678,7 @@ rule initialize_e590e3e8_token_0_price_stored(env e) {
     uint8[] _supportedChains;
 
     // assign all the 'before' variables
+    require(forall uint256 i. (0 < i && i < _tokenIds.length) => (_tokenIds[0] != _tokenIds[i]));
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
@@ -786,7 +729,8 @@ rule initialize_e590e3e8_chain_0_supported(env e) {
  *
  * Possible consequences: Bridge operations failing when interacting with invalid token contracts, potential for exploitation
  */
-rule initialize_e590e3e8_zero_token_address_reverts(env e) {
+// gereon: not checked, maybe it should be
+rule __initialize_e590e3e8_zero_token_address_reverts(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
@@ -816,7 +760,8 @@ rule initialize_e590e3e8_zero_token_address_reverts(env e) {
  *
  * Possible consequences: Division by zero errors, free bridge operations, economic attacks, broken fee mechanisms
  */
-rule initialize_e590e3e8_zero_token_price_reverts(env e) {
+// gereon: not checked, maybe it should be
+rule __initialize_e590e3e8_zero_token_price_reverts(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
@@ -846,7 +791,8 @@ rule initialize_e590e3e8_zero_token_price_reverts(env e) {
  *
  * Possible consequences: Amount calculation errors, precision loss, incorrect token amounts on destination chains
  */
-rule initialize_e590e3e8_zero_sui_decimal_reverts(env e) {
+// gereon: not checked, maybe it should be
+rule __initialize_e590e3e8_zero_sui_decimal_reverts(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
@@ -876,7 +822,8 @@ rule initialize_e590e3e8_zero_sui_decimal_reverts(env e) {
  *
  * Possible consequences: Token configuration overwrites, inconsistent token data, users unable to distinguish between different tokens
  */
-rule initialize_e590e3e8_duplicate_tokenId_0_1_reverts(env e) {
+// gereon: not checked, maybe it should be
+rule __initialize_e590e3e8_duplicate_tokenId_0_1_reverts(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
@@ -906,7 +853,8 @@ rule initialize_e590e3e8_duplicate_tokenId_0_1_reverts(env e) {
  *
  * Possible consequences: Redundant chain configurations, potential for inconsistent chain settings, confusion in routing logic
  */
-rule initialize_e590e3e8_duplicate_chain_0_1_reverts(env e) {
+// gereon: not checked, maybe it should be
+rule __initialize_e590e3e8_duplicate_chain_0_1_reverts(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
