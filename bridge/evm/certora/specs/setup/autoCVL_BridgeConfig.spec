@@ -1056,7 +1056,7 @@ rule initialize_e590e3e8_chain_1_supported(env e) {
  *
  * Possible consequences: Unintended token configuration changes, existing token settings corrupted, unpredictable bridge behavior
  */
-// gereon: AI missed the _supportedChains array
+// gereon: AI missed the _tokenIds array
 rule initialize_e590e3e8_unspecified_token_address_unchanged(env e) {
     address _committee;
     uint8 _chainID;
@@ -1091,7 +1091,7 @@ rule initialize_e590e3e8_unspecified_token_address_unchanged(env e) {
  *
  * Possible consequences: Existing token decimal settings corrupted, amount calculation errors for previously configured tokens
  */
-// gereon: AI missed the _supportedChains array
+// gereon: AI missed the _tokenIds array
 rule initialize_e590e3e8_unspecified_token_decimal_unchanged(env e) {
     address _committee;
     uint8 _chainID;
@@ -1102,7 +1102,7 @@ rule initialize_e590e3e8_unspecified_token_decimal_unchanged(env e) {
     uint8[] _supportedChains;
 
     uint8 i;
-    require(forall uint256 j. (j < _supportedChains.length) => (i != _supportedChains[j]));
+    require(forall uint256 j. (j < _tokenIds.length) => (i != _tokenIds[j]));
 
     // assign all the 'before' variables
     uint8 currentContract_supportedTokens_255__suiDecimal_before = currentContract.supportedTokens[i].suiDecimal;
@@ -1126,7 +1126,7 @@ rule initialize_e590e3e8_unspecified_token_decimal_unchanged(env e) {
  *
  * Possible consequences: Existing token prices corrupted, wrong fee calculations for previously configured tokens
  */
-// gereon: AI missed the _supportedChains array
+// gereon: AI missed the _tokenIds array
 rule initialize_e590e3e8_unspecified_price_unchanged(env e) {
     address _committee;
     uint8 _chainID;
@@ -1137,7 +1137,7 @@ rule initialize_e590e3e8_unspecified_price_unchanged(env e) {
     uint8[] _supportedChains;
 
     uint8 i;
-    require(forall uint256 j. (j < _supportedChains.length) => (i != _supportedChains[j]));
+    require(forall uint256 j. (j < _tokenIds.length) => (i != _tokenIds[j]));
 
     // assign all the 'before' variables
     uint64 currentContract_tokenPrices_255__before = currentContract.tokenPrices[i];
