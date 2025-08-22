@@ -244,7 +244,7 @@ rule initialize_non_committee_has_zero_stake_8(env e) {
     address addr;
 
     // assign all the 'before' variables
-    require(forall uint256 j. (0 < j && j < committee.length) => (addr != committee[j]));
+    require(forall uint256 j. (j < committee.length) => (addr != committee[j]));
     require(currentContract.committeeStake[addr] == 0);
 
     // call function under test
@@ -266,24 +266,26 @@ rule initialize_non_committee_has_zero_stake_8(env e) {
  *
  * Possible consequences: Incorrect voting power, signature verification failures, committee members with wrong influence levels
  */
+// gereon: good idea, but the AI had no idea how to do it
 rule initialize_committee_stake_set_correctly_6(env e) {
     address[] committee;
     uint16[] stake;
     uint16 minStakeRequired;
-    uint256 i;
 
     // assign all the 'before' variables
-    address committee_i__before = committee[i];
-    uint16 stake_i__before = stake[i];
+    require(
+        forall uint256 i. forall uint256 j. (i < j && j < committee.length) => (committee[i] != committee[j])
+    );
 
     // call function under test
     initialize(e, committee, stake, minStakeRequired);
 
     // assign all the 'after' variables
-    uint16 committeeStake_committee_i__before__after = currentContract.committeeStake[committee_i__before];
 
     // verify integrity
-    assert (committeeStake_committee_i__before__after == stake_i__before);
+    assert(
+        forall uint256 i. (i < committee.length) => (currentContract.committeeStake[committee[i]] == stake[i])
+    );
 }
 
 /*
