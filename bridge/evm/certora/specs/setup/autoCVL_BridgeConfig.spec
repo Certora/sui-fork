@@ -39,37 +39,6 @@ rule initialize_array_length_mismatch_reverts_2(env e) {
 }
 
 /*
- * _committee == address(0) => revert
- *
- * What it means: The initialize function must revert if the _committee parameter is the zero address
- *
- * Why it should hold: The committee address is critical for signature verification and authorization. A zero address would break all committee-based operations
- *
- * Possible consequences: Complete loss of access control, inability to update token prices or add tokens, bridge becomes unmanageable
- */
-// gereon: no such check, maybe there should be
-rule __initialize_invalid_committee_reverts_3(env e) {
-    address _committee;
-    uint8 _chainID;
-    address[] _supportedTokens;
-    uint64[] _tokenPrices;
-    uint8[] _tokenIds;
-    uint8[] _suiDecimals;
-    uint8[] _supportedChains;
-
-    // assign all the 'before' variables
-
-    // call function under test
-    initialize@withrevert(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
-    bool initialize_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((_committee == 0) => initialize_reverted);
-}
-
-/*
  * _committee != address(0) => committee@after == _committee
  *
  * What it means: When _committee is not the zero address, the committee storage variable should be set to _committee after initialization
@@ -420,7 +389,8 @@ rule addTokensWithSignatures_existing_tokens_unchanged_19(env e) {
  *
  * Possible consequences: Complete bridge dysfunction, inability to process any cross-chain transactions, potential for unauthorized operations if signature verification is bypassed
  */
-rule initialize_e590e3e8_zero_committee_reverts(env e) {
+// gereon: no such check, maybe there should be
+rule __initialize_e590e3e8_zero_committee_reverts(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
