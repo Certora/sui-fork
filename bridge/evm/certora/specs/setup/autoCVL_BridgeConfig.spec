@@ -47,7 +47,8 @@ rule initialize_array_length_mismatch_reverts_2(env e) {
  *
  * Possible consequences: Complete loss of access control, inability to update token prices or add tokens, bridge becomes unmanageable
  */
-rule initialize_invalid_committee_reverts_3(env e) {
+// gereon: no such check, maybe there should be
+rule __initialize_invalid_committee_reverts_3(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
@@ -170,6 +171,7 @@ rule initialize_sets_supported_chains_7(env e) {
  *
  * Possible consequences: Wrong token interactions, fund loss, bridge operations with incorrect tokens
  */
+// gereon: AI almost got it right. not.
 rule initialize_sets_token_addresses_8(env e) {
     address _committee;
     uint8 _chainID;
@@ -178,21 +180,19 @@ rule initialize_sets_token_addresses_8(env e) {
     uint8[] _tokenIds;
     uint8[] _suiDecimals;
     uint8[] _supportedChains;
-    uint256 i;
 
     // assign all the 'before' variables
-    uint256 _supportedTokens_length_before = _supportedTokens.length;
-    uint8 _tokenIds_i__before = _tokenIds[i];
-    address _supportedTokens_i__before = _supportedTokens[i];
+    require(forall uint256 i. forall uint256 j. (i < j && j < _tokenIds.length) => (_tokenIds[i] != _tokenIds[j]));
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
 
     // assign all the 'after' variables
-    address supportedTokens__tokenIds_i__before__tokenAddress_after = currentContract.supportedTokens[_tokenIds_i__before].tokenAddress;
 
     // verify integrity
-    assert ((_supportedTokens_length_before > 0) => (supportedTokens__tokenIds_i__before__tokenAddress_after == _supportedTokens_i__before));
+    assert(
+        forall uint256 j. (j < _supportedTokens.length) => currentContract.supportedTokens[_tokenIds[j]].tokenAddress == _supportedTokens[j]
+    );
 }
 
 /*
@@ -204,6 +204,7 @@ rule initialize_sets_token_addresses_8(env e) {
  *
  * Possible consequences: Incorrect amount calculations, fund loss due to precision errors, bridge operations with wrong amounts
  */
+// gereon: AI almost got it right. not.
 rule initialize_sets_token_decimals_9(env e) {
     address _committee;
     uint8 _chainID;
@@ -212,21 +213,19 @@ rule initialize_sets_token_decimals_9(env e) {
     uint8[] _tokenIds;
     uint8[] _suiDecimals;
     uint8[] _supportedChains;
-    uint256 i;
 
     // assign all the 'before' variables
-    uint256 _suiDecimals_length_before = _suiDecimals.length;
-    uint8 _tokenIds_i__before = _tokenIds[i];
-    uint8 _suiDecimals_i__before = _suiDecimals[i];
+    require(forall uint256 i. forall uint256 j. (i < j && j < _tokenIds.length) => (_tokenIds[i] != _tokenIds[j]));
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
 
     // assign all the 'after' variables
-    uint8 supportedTokens__tokenIds_i__before__suiDecimal_after = currentContract.supportedTokens[_tokenIds_i__before].suiDecimal;
 
     // verify integrity
-    assert ((_suiDecimals_length_before > 0) => (supportedTokens__tokenIds_i__before__suiDecimal_after == _suiDecimals_i__before));
+    assert(
+        forall uint256 j. (j < _suiDecimals.length) => currentContract.supportedTokens[_tokenIds[j]].suiDecimal == _suiDecimals[j]
+    );
 }
 
 /*
@@ -238,6 +237,7 @@ rule initialize_sets_token_decimals_9(env e) {
  *
  * Possible consequences: Incorrect fee calculations, wrong token valuations, economic attacks on bridge
  */
+// gereon: AI almost got it right. not.
 rule initialize_sets_token_prices_10(env e) {
     address _committee;
     uint8 _chainID;
@@ -249,18 +249,17 @@ rule initialize_sets_token_prices_10(env e) {
     uint256 i;
 
     // assign all the 'before' variables
-    uint256 _tokenPrices_length_before = _tokenPrices.length;
-    uint8 _tokenIds_i__before = _tokenIds[i];
-    uint64 _tokenPrices_i__before = _tokenPrices[i];
+    require(forall uint256 i. forall uint256 j. (i < j && j < _tokenIds.length) => (_tokenIds[i] != _tokenIds[j]));
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
 
     // assign all the 'after' variables
-    uint64 tokenPrices__tokenIds_i__before__after = currentContract.tokenPrices[_tokenIds_i__before];
 
     // verify integrity
-    assert ((_tokenPrices_length_before > 0) => (tokenPrices__tokenIds_i__before__after == _tokenPrices_i__before));
+    assert(
+        forall uint256 j. (j < _suiDecimals.length) => currentContract.tokenPrices[_tokenIds[j]] == _tokenPrices[j]
+    );
 }
 
 /*
@@ -272,7 +271,8 @@ rule initialize_sets_token_prices_10(env e) {
  *
  * Possible consequences: Token configuration overwrites, lost token data, inconsistent bridge state, some tokens become inaccessible
  */
-rule initialize_duplicate_token_IDs_unique_11(env e) {
+// gereon: no such check, maybe there should be
+rule __initialize_duplicate_token_IDs_unique_11(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
@@ -306,7 +306,8 @@ rule initialize_duplicate_token_IDs_unique_11(env e) {
  *
  * Possible consequences: Gas waste, potential configuration errors, unclear bridge state
  */
-rule initialize_duplicate_chain_IDs_unique_12(env e) {
+// gereon: no such check, maybe there should be
+rule __initialize_duplicate_chain_IDs_unique_12(env e) {
     address _committee;
     uint8 _chainID;
     address[] _supportedTokens;
