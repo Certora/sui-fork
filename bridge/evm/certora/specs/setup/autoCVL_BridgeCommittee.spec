@@ -207,7 +207,7 @@ rule updateBlocklistWithSignatures_message_type_must_match_11(env e) {
  * Possible consequences: Compromised governance if blocklisted members can still influence decisions, potential for malicious actors to maintain control
  */
 // gereon: nice idea, but it's not easy to extract the signer from the message (and the AI didn't even attempt to do it...)
-rule updateBlocklistWithSignatures_blocklisted_signer_reverts_12(env e) {
+rule __updateBlocklistWithSignatures_blocklisted_signer_reverts_12(env e) {
     // Declare variables
     bytes[] signatures;
     BridgeUtils.Message message;
@@ -808,6 +808,7 @@ rule updateBlocklistWithSignatures_f6f66e98_invalid_signature_length_revert(env 
     bytes[] signatures;
     BridgeUtils.Message message;
     uint256 i;
+    require(i < signatures.length);
 
     // assign all the 'before' variables
 
