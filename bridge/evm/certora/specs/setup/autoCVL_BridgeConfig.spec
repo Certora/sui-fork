@@ -1056,6 +1056,7 @@ rule initialize_e590e3e8_chain_1_supported(env e) {
  *
  * Possible consequences: Unintended token configuration changes, existing token settings corrupted, unpredictable bridge behavior
  */
+// gereon: AI missed the _supportedChains array
 rule initialize_e590e3e8_unspecified_token_address_unchanged(env e) {
     address _committee;
     uint8 _chainID;
@@ -1065,14 +1066,17 @@ rule initialize_e590e3e8_unspecified_token_address_unchanged(env e) {
     uint8[] _suiDecimals;
     uint8[] _supportedChains;
 
+    uint8 i;
+    require(forall uint256 j. (j < _tokenIds.length) => (i != _tokenIds[j]));
+
     // assign all the 'before' variables
-    address currentContract_supportedTokens_255__tokenAddress_before = currentContract.supportedTokens[255].tokenAddress;
+    address currentContract_supportedTokens_255__tokenAddress_before = currentContract.supportedTokens[i].tokenAddress;
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
 
     // assign all the 'after' variables
-    address currentContract_supportedTokens_255__tokenAddress_after = currentContract.supportedTokens[255].tokenAddress;
+    address currentContract_supportedTokens_255__tokenAddress_after = currentContract.supportedTokens[i].tokenAddress;
 
     // verify integrity
     assert (currentContract_supportedTokens_255__tokenAddress_before == currentContract_supportedTokens_255__tokenAddress_after), "supportedTokens[255].tokenAddress@before == supportedTokens[255].tokenAddress@after";
@@ -1087,6 +1091,7 @@ rule initialize_e590e3e8_unspecified_token_address_unchanged(env e) {
  *
  * Possible consequences: Existing token decimal settings corrupted, amount calculation errors for previously configured tokens
  */
+// gereon: AI missed the _supportedChains array
 rule initialize_e590e3e8_unspecified_token_decimal_unchanged(env e) {
     address _committee;
     uint8 _chainID;
@@ -1096,14 +1101,17 @@ rule initialize_e590e3e8_unspecified_token_decimal_unchanged(env e) {
     uint8[] _suiDecimals;
     uint8[] _supportedChains;
 
+    uint8 i;
+    require(forall uint256 j. (j < _supportedChains.length) => (i != _supportedChains[j]));
+
     // assign all the 'before' variables
-    uint8 currentContract_supportedTokens_255__suiDecimal_before = currentContract.supportedTokens[255].suiDecimal;
+    uint8 currentContract_supportedTokens_255__suiDecimal_before = currentContract.supportedTokens[i].suiDecimal;
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
 
     // assign all the 'after' variables
-    uint8 currentContract_supportedTokens_255__suiDecimal_after = currentContract.supportedTokens[255].suiDecimal;
+    uint8 currentContract_supportedTokens_255__suiDecimal_after = currentContract.supportedTokens[i].suiDecimal;
 
     // verify integrity
     assert (currentContract_supportedTokens_255__suiDecimal_before == currentContract_supportedTokens_255__suiDecimal_after), "supportedTokens[255].suiDecimal@before == supportedTokens[255].suiDecimal@after";
@@ -1118,6 +1126,7 @@ rule initialize_e590e3e8_unspecified_token_decimal_unchanged(env e) {
  *
  * Possible consequences: Existing token prices corrupted, wrong fee calculations for previously configured tokens
  */
+// gereon: AI missed the _supportedChains array
 rule initialize_e590e3e8_unspecified_price_unchanged(env e) {
     address _committee;
     uint8 _chainID;
@@ -1127,14 +1136,17 @@ rule initialize_e590e3e8_unspecified_price_unchanged(env e) {
     uint8[] _suiDecimals;
     uint8[] _supportedChains;
 
+    uint8 i;
+    require(forall uint256 j. (j < _supportedChains.length) => (i != _supportedChains[j]));
+
     // assign all the 'before' variables
-    uint64 currentContract_tokenPrices_255__before = currentContract.tokenPrices[255];
+    uint64 currentContract_tokenPrices_255__before = currentContract.tokenPrices[i];
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
 
     // assign all the 'after' variables
-    uint64 currentContract_tokenPrices_255__after = currentContract.tokenPrices[255];
+    uint64 currentContract_tokenPrices_255__after = currentContract.tokenPrices[i];
 
     // verify integrity
     assert (currentContract_tokenPrices_255__before == currentContract_tokenPrices_255__after), "tokenPrices[255]@before == tokenPrices[255]@after";
@@ -1149,6 +1161,7 @@ rule initialize_e590e3e8_unspecified_price_unchanged(env e) {
  *
  * Possible consequences: Existing chain configurations corrupted, previously supported chains becoming unsupported
  */
+// gereon: AI missed the _supportedChains array
 rule initialize_e590e3e8_unspecified_chain_unchanged(env e) {
     address _committee;
     uint8 _chainID;
@@ -1158,14 +1171,17 @@ rule initialize_e590e3e8_unspecified_chain_unchanged(env e) {
     uint8[] _suiDecimals;
     uint8[] _supportedChains;
 
+    uint8 i;
+    require(forall uint256 j. (j < _supportedChains.length) => (i != _supportedChains[j]));
+
     // assign all the 'before' variables
-    bool currentContract_supportedChains_255__before = currentContract.supportedChains[255];
+    bool currentContract_supportedChains_255__before = currentContract.supportedChains[i];
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
 
     // assign all the 'after' variables
-    bool currentContract_supportedChains_255__after = currentContract.supportedChains[255];
+    bool currentContract_supportedChains_255__after = currentContract.supportedChains[i];
 
     // verify integrity
     assert (currentContract_supportedChains_255__before == currentContract_supportedChains_255__after), "supportedChains[255]@before == supportedChains[255]@after";
