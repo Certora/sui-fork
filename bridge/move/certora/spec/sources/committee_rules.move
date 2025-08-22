@@ -5,9 +5,11 @@ use bridge::committee::BridgeCommittee;
 use bridge::message::BridgeMessage;
 
 use cvlm::asserts::cvlm_assert;
-use cvlm::manifest::rule;
+use cvlm::manifest::{rule, target, target_sanity};
 
 public fun cvlm_manifest() {
+    target(@bridge, b"committee", b"verify_signatures");
+    target_sanity();
     rule(b"verified_signatures_success_conditions");
 }
 

@@ -13,23 +13,35 @@ use bridge::bridge::{
   test_get_parsed_token_transfer_message,
 };
 use bridge::bridge_env::{get_total_supply};
-use bridge::eth::ETH;
 use bridge::message::{BridgeMessage,  get_transfer_payload};
 use bridge::message_types;
 use certora::sui_object_summaries::deleted;
 use cvlm::asserts::{cvlm_assert, cvlm_assume_msg};
 use cvlm::ghost::{ghost_destroy, };
-use cvlm::manifest::rule;
+use cvlm::manifest::{rule, target, invoker, target_sanity};
 use sui::address;
 use sui::clock::Clock;
-use sui::coin::{Coin, value, CoinMetadata};
+use sui::coin::{Coin, value};
 use sui::event::events_by_type;
 use cvlm::nondet::nondet;
+use cvlm::function::Function;
 use sui_system::sui_system::SuiSystemState;
 
 
 
 public fun cvlm_manifest() {
+  target(@bridge, b"bridge", b"committee_registration");
+  target(@bridge, b"bridge", b"update_node_url");
+  target(@bridge, b"bridge", b"register_foreign_token");
+  target(@bridge, b"bridge", b"send_token");
+  target(@bridge, b"bridge", b"approve_token_transfer");
+  target(@bridge, b"bridge", b"claim_token");
+  target(@bridge, b"bridge", b"claim_and_transfer_token");
+  target(@bridge, b"bridge", b"execute_system_message");
+
+  target_sanity();
+
+  invoker(b"invoke");
   
   rule(b"send_token_burns_coin");
   rule(b"only_owner_can_claim");
@@ -46,77 +58,21 @@ public fun cvlm_manifest() {
 
 fun log<T>(_obj: &T) {}
 
-/* ---- */
-
-/* This leads to an error in the prover:
- *
- * > An internal Prover error occurred, please double-check the provided configuration or command-line arguments, and see low-level crash details below:
- * > Unknown SerializedType 66/69/71
- * 
- * See eg: https://vaas-stg.certora.com/output/8195906/fa3f822ac85d453eb0ebc2fc9e769683?anonymousKey=6cf56e9729bddf5cc88453068197213a3838dd6e
- * 
- */
-
-// /// Enum containing all relevant public bridge functions and their arguments
-// public enum BridgeFun<phantom T> {
-//   committee_registration {
-//     system_state: sui_system::sui_system::SuiSystemState,
-//     bridge_pubkey_bytes: vector<u8>,
-//     http_rest_url: vector<u8>,
-//   },
-//   register_foreign_token { tc: TreasuryCap<T>, uc: UpgradeCap, metadata: CoinMetadata<T> },
-//   send_token { target_chain: u8, target_address: vector<u8>, token: Coin<ETH> },
-//   approve_token_transfer { message: BridgeMessage, signatures: vector<vector<u8>> },
-//   claim_token { clock: Clock, source_chain: u8, bridge_seq_num: u64 },
-//   claim_and_transfer_token { clock: Clock, source_chain: u8, bridge_seq_num: u64 },
-//   execute_system_message { message: BridgeMessage, signatures: vector<vector<u8>> },
-// }
-
-fun call<T>(fn: vector<u8>, bridge: &mut Bridge, clock: &Clock,ctx: &mut TxContext) {
-  match (fn) {
-    b"committee_registration" => {
-      let mut system_state = nondet<SuiSystemState>();
-      bridge.committee_registration(&mut system_state, nondet(), nondet(), ctx);
-      ghost_destroy(system_state);
-    },
-    b"register_foreign_token" => {
-      let coin_metadata = nondet<CoinMetadata<T>>();
-      bridge.register_foreign_token<T>(nondet(), nondet(), &coin_metadata);
-      ghost_destroy(coin_metadata);
-    },
-    b"send_token" => {
-      bridge.send_token<T>(nondet(), nondet(), nondet(), ctx);
-    },
-    b"approve_token_transfer" => {
-      bridge.approve_token_transfer(nondet(), nondet());
-    },
-    b"claim_token" => {
-      let coin = bridge.claim_token<T>(clock, nondet(), nondet(), ctx);
-      ghost_destroy(coin);
-    },
-    b"claim_and_transfer_token" => {
-      bridge.claim_and_transfer_token<T>(clock, nondet(), nondet(), ctx);
-    },
-    b"execute_system_message" => {
-      bridge.execute_system_message(nondet(), nondet());
-    },
-    fn => {
-      let _ = fn;
-      assert!(false);
-    }
-  }
-}
-
-/* ----- */
+native fun invoke(
+  fn: Function, 
+  bridge: &mut Bridge, 
+  ctx: &mut TxContext, 
+  state: &mut SuiSystemState
+);
 
 
 /// Sending a token to the bridge destroys the token.
 /// This is tracked using the `deleted()` function, that returns for any object-address whether is was deleted.
-public fun send_token_burns_coin(
+public fun send_token_burns_coin<T>(
   bridge: &mut Bridge,
   target_chain: u8,
   target_address: vector<u8>,
-  token: Coin<ETH>,
+  token: Coin<T>,
   ctx: &mut TxContext,
 ) {
   let token_address = object::borrow_id(&token).to_address();
@@ -126,35 +82,35 @@ public fun send_token_burns_coin(
 
 
 /// If coins/tokens are minted, then either because "claim_token" or "claim_and_transfer_token" has been called
-public fun only_claiming_mints_tokens(
+public fun only_claiming_mints_tokens<T>(
   bridge: &mut Bridge,
-  fn: vector<u8>,
-  clock: &Clock,
+  fn: Function,
   ctx: &mut TxContext,
+  state: &mut SuiSystemState
 ) {
 
-  let balance_pre = get_total_supply<ETH>(bridge);
+  let balance_pre = get_total_supply<T>(bridge);
 
-  call<ETH>(fn, bridge, clock, ctx);
+  invoke(fn, bridge, ctx, state);
 
-  let balance_post = get_total_supply<ETH>(bridge);
+  let balance_post = get_total_supply<T>(bridge);
 
   if (balance_pre < balance_post) {
-    cvlm_assert(fn == b"claim_token" || fn == b"claim_and_transfer_token")
+    cvlm_assert(fn.name() == b"claim_token" || fn.name() == b"claim_and_transfer_token")
   }
 }
 
 
 /// If a call to "claim_token" succeeds, then the tx sender must be the owner of the tokens, 
 /// as specified in the corresponding transfer record.
-public fun only_owner_can_claim(
+public fun only_owner_can_claim<T>(
   bridge: &mut Bridge,
   clock: &Clock,
   ctx: &mut TxContext,
   source_chain: u8,
   bridge_seq_num: u64,
 ) {
-  let c: Coin<ETH> = bridge.claim_token(clock, source_chain, bridge_seq_num, ctx);
+  let c: Coin<T> = bridge.claim_token(clock, source_chain, bridge_seq_num, ctx);
   log(&c);
 
   let msg = bridge.test_get_parsed_token_transfer_message(source_chain, bridge_seq_num).destroy_some();
@@ -178,26 +134,16 @@ public fun only_owner_can_claim(
 }
 
 
-/* 
-  The following rule crashes with 
-  
-  > Got a conditional jump which is not conditional in 99_1_0_0_0_0: JumpiCmd 193_1_0_0_0_0 193_1_0_0_0_0 tacTmp57682:bool (4441:128:1:0x0) // bridge_rules.move
-
-  https://vaas-stg.certora.com/output/8195906/e62daec033cb4c9c935702e4bfaa7c17?anonymousKey=4b3e1bc11acb35aac069added3b67bbbe97378fd
-*/ 
 /// If a new transfer records is registered at the bridge, then it either must be verified or the source chain is the bridge itself.
 /// For now, verified here just checks that the list of signatures is not empty.
 public fun transfer_records_are_valid(bridge: &mut Bridge,
-  //fn: BridgeFun<ETH>,
-  _ctx: &mut TxContext,
-  msg: BridgeMessage,
-  sigs: vector<vector<u8>>
-  ) {
+  fn: Function,
+  ctx: &mut TxContext,
+  state: &mut SuiSystemState
+) {
     let records_pre = bridge.test_load_inner().inner_token_transfer_records().length();
 
-    // Instead call any method here:
-    // fn.call(bridge, ctx)
-    bridge.approve_token_transfer(msg, sigs);
+    invoke(fn, bridge, ctx, state);
 
 
     let records = bridge.test_load_inner_mut().inner_token_transfer_records_mut();
@@ -228,13 +174,14 @@ public fun transfer_records_are_valid(bridge: &mut Bridge,
 /// Asserts that sequence number never decrease
 public fun seq_nums_monotonically_increase(
   bridge: &mut Bridge,
-  //fn: BridgeFun<ETH>,
-  _ctx: &mut TxContext,
+  fn: Function,
+  ctx: &mut TxContext,
+  state: &mut SuiSystemState
 ) {
   let message_type: u8 = nondet();
   let seq_pre = bridge.get_seq_num_for(message_type);
-  
-  //fn.call(bridge, ctx);
+
+  invoke(fn, bridge, ctx, state);
 
   let seq_post = bridge.get_seq_num_for(message_type);
   cvlm_assert(seq_pre <= seq_post);
@@ -242,11 +189,11 @@ public fun seq_nums_monotonically_increase(
 
 
 // #[rule]
-public fun send_token_effects(
+public fun send_token_effects<T>(
   bridge: &mut Bridge,
   target_chain: u8,
   target_address: vector<u8>,
-  coin: Coin<ETH>,
+  coin: Coin<T>,
   ctx: &mut TxContext,
 ) {
   cvlm_assume_msg(
@@ -255,13 +202,13 @@ public fun send_token_effects(
   );
 
   let coin_value = coin.value();
-  let total_supply_before = get_total_supply<ETH>(bridge);
+  let total_supply_before = get_total_supply<T>(bridge);
 
   let seq_num = bridge.get_seq_num_for(message_types::token());
   bridge.send_token(target_chain, target_address, coin, ctx);
 
   // verify reduction in total supply
-  cvlm_assert(total_supply_before - coin_value == get_total_supply<ETH>(bridge));
+  cvlm_assert(total_supply_before - coin_value == get_total_supply<T>(bridge));
 
   // verify send event
   let deposited_events = events_by_type<TokenDepositedEvent>();
@@ -315,13 +262,13 @@ public fun approve_token_transfer_effects(
 }
 
 // #[rule]
-public fun claim_token_effects(
+public fun claim_token_effects<T>(
   bridge: &mut Bridge,
   clock: &Clock,
   source_chain: u8,
   bridge_seq_num: u64,
   ctx: &mut TxContext,
-): Coin<ETH> {
+): Coin<T> {
   cvlm_assume_msg(
     events_by_type<TokenTransferClaimed>().length() == 0,
     b"start with zero TokenTransferClaimed",
@@ -335,12 +282,12 @@ public fun claim_token_effects(
     b"start with zero TokenTransferLimitExceed",
   );
 
-  let total_supply_before = get_total_supply<ETH>(bridge);
+  let total_supply_before = get_total_supply<T>(bridge);
 
-  let token = bridge.claim_token<ETH>(clock, source_chain, bridge_seq_num, ctx);
+  let token = bridge.claim_token<T>(clock, source_chain, bridge_seq_num, ctx);
 
   let token_value = token.value();
-  cvlm_assert(total_supply_before + token_value == get_total_supply<ETH>(bridge));
+  cvlm_assert(total_supply_before + token_value == get_total_supply<T>(bridge));
 
   let claimed = events_by_type<TokenTransferClaimed>();
   let already_claimed = events_by_type<TokenTransferAlreadyClaimed>();
@@ -366,7 +313,7 @@ public fun claim_token_effects(
 }
 
 // #[rule]
-public fun claim_and_transfer_token_effects(
+public fun claim_and_transfer_token_effects<T>(
   bridge: &mut Bridge,
   clock: &Clock,
   source_chain: u8,
@@ -386,13 +333,13 @@ public fun claim_and_transfer_token_effects(
     b"start with zero TokenTransferLimitExceed",
   );
   cvlm_assume_msg(
-    certora::sui_transfer_summaries::transfers<Coin<ETH>>().length() == 0,
+    certora::sui_transfer_summaries::transfers<Coin<T>>().length() == 0,
     b"start with zero Sui transfers",
   );
 
-  let total_supply_before = get_total_supply<ETH>(bridge);
+  let total_supply_before = get_total_supply<T>(bridge);
 
-  bridge.claim_and_transfer_token<ETH>(clock, source_chain, bridge_seq_num, ctx);
+  bridge.claim_and_transfer_token<T>(clock, source_chain, bridge_seq_num, ctx);
 
   let claimed = events_by_type<TokenTransferClaimed>();
   let already_claimed = events_by_type<TokenTransferAlreadyClaimed>();
@@ -414,9 +361,9 @@ public fun claim_and_transfer_token_effects(
   cvlm_assert(mt == message_types::token());
   cvlm_assert(sn == bridge_seq_num);
 
-  let total_supply_after = get_total_supply<ETH>(bridge);
+  let total_supply_after = get_total_supply<T>(bridge);
 
-  let transfers = certora::sui_transfer_summaries::transfers<Coin<ETH>>();
+  let transfers = certora::sui_transfer_summaries::transfers<Coin<T>>();
   let mut total_value_transferred = 0;
   transfers.do_ref!(|transfer| {
     total_value_transferred = total_value_transferred + transfer.value().value();
