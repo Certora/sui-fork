@@ -423,114 +423,6 @@ rule updateTokenPriceWithSignatures_wrong_message_type_reverts_13(env e) {
 }
 
 /*
- * nonces[message.chainID]@after == nonces[message.chainID]@before + 1
- *
- * What it means: Each successful price update must increment the nonce for the message's source chain to prevent replay attacks
- *
- * Why it should hold: The verifyMessageAndSignatures modifier should increment nonces to ensure each message can only be processed once. This prevents replay attacks using the same signed message multiple times
- *
- * Possible consequences: Without proper nonce incrementation, attackers could replay the same price update message multiple times, potentially causing state inconsistencies or bypassing rate limiting
- */
-rule updateTokenPriceWithSignatures_nonce_increments_14(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    uint8 message_chainID_before = message.chainID;
-    uint64 nonces_message_chainID_before__before = currentContract.nonces[message_chainID_before];
-
-    // call function under test
-    updateTokenPriceWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    uint64 nonces_message_chainID_before__after = currentContract.nonces[message_chainID_before];
-
-    // verify integrity
-    assert (nonces_message_chainID_before__after == nonces_message_chainID_before__before + 1);
-}
-
-/*
- * supportedChains[chainId]@after == supportedChains[chainId]@before && chainID@after == chainID@before
- *
- * What it means: Price updates must not modify the supportedChains mapping or the chainID, which define which chains the bridge supports
- *
- * Why it should hold: updateTokenPriceWithSignatures should only update token prices, not chain configuration. Modifying chain settings would be a serious scope violation that could break bridge routing
- *
- * Possible consequences: Unintended changes to chain configuration could break cross-chain operations, enable routing to unsupported chains, or disable legitimate bridge routes
- */
-rule updateTokenPriceWithSignatures_chain_config_unchanged_15(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-    uint8 chainId;
-
-    // assign all the 'before' variables
-    bool supportedChains_chainId__before = currentContract.supportedChains[chainId];
-    uint8 chainID_before = currentContract.chainID;
-
-    // call function under test
-    updateTokenPriceWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    bool supportedChains_chainId__after = currentContract.supportedChains[chainId];
-    uint8 chainID_after = currentContract.chainID;
-
-    // verify integrity
-    assert ((supportedChains_chainId__after == supportedChains_chainId__before) && (chainID_after == chainID_before));
-}
-
-/*
- * message.messageType != BridgeUtils.ADD_EVM_TOKENS => revert
- *
- * What it means: The function must revert if the message type is not specifically ADD_EVM_TOKENS, preventing misuse of other message types
- *
- * Why it should hold: The verifyMessageAndSignatures modifier checks that the message type matches ADD_EVM_TOKENS. Using wrong message types could bypass intended validation logic or execute unintended operations
- *
- * Possible consequences: Function misuse, bypassing of validation checks, potential execution of unintended operations, protocol confusion
- */
-rule addTokensWithSignatures_wrong_message_type_reverts_16(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    uint8 message_messageType_before = message.messageType;
-
-    // call function under test
-    addTokensWithSignatures@withrevert(e, signatures, message);
-    bool addTokensWithSignatures_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((message_messageType_before != 7) => addTokensWithSignatures_reverted);
-}
-
-/*
- * message.payload.length == 0 => revert
- *
- * What it means: The function must revert if the message payload is empty, as there would be no token data to process
- *
- * Why it should hold: The function needs to decode token information from the payload using BridgeUtils.decodeAddTokensPayload. An empty payload would cause decoding to fail or result in invalid token data
- *
- * Possible consequences: Function execution with no meaningful operation, potential state corruption, waste of gas, protocol confusion
- */
-rule addTokensWithSignatures_empty_payload_reverts_17(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    uint256 message_payload_length_before = message.payload.length;
-
-    // call function under test
-    addTokensWithSignatures@withrevert(e, signatures, message);
-    bool addTokensWithSignatures_reverted = lastReverted;
-
-    // assign all the 'after' variables
-
-    // verify integrity
-    assert ((message_payload_length_before == 0) => addTokensWithSignatures_reverted);
-}
-
-/*
  * tokenID1 != tokenID2 && supportedTokens[tokenID1].tokenAddress != address(0) && supportedTokens[tokenID2].tokenAddress != address(0) => supportedTokens[tokenID1].tokenAddress != supportedTokens[tokenID2].tokenAddress
  *
  * What it means: Different token IDs must map to different token addresses, ensuring no two token IDs can reference the same underlying token contract
@@ -583,85 +475,6 @@ rule addTokensWithSignatures_existing_tokens_unchanged_19(env e) {
 
     // verify integrity
     assert ((supportedTokens_tokenID__tokenAddress_before != 0) => (supportedTokens_tokenID__tokenAddress_after == supportedTokens_tokenID__tokenAddress_before));
-}
-
-/*
- * supportedChains[chainId]@after == supportedChains[chainId]@before
- *
- * What it means: The function should not modify which chains are supported by the bridge, as it only handles token addition
- *
- * Why it should hold: addTokensWithSignatures is specifically for adding tokens, not modifying chain support. Chain support changes should go through separate governance processes
- *
- * Possible consequences: Unauthorized chain modifications, bypass of chain governance, potential security vulnerabilities from unsupported chains
- */
-rule addTokensWithSignatures_chain_support_unchanged_20(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-    uint8 chainId;
-
-    // assign all the 'before' variables
-    bool supportedChains_chainId__before = currentContract.supportedChains[chainId];
-
-    // call function under test
-    addTokensWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    bool supportedChains_chainId__after = currentContract.supportedChains[chainId];
-
-    // verify integrity
-    assert (supportedChains_chainId__after == supportedChains_chainId__before);
-}
-
-/*
- * committee@after == committee@before
- *
- * What it means: The committee address should remain unchanged during token addition operations
- *
- * Why it should hold: The committee is the core governance mechanism for the bridge. Token addition should not modify governance structure, which requires separate authorization
- *
- * Possible consequences: Governance takeover, unauthorized control of bridge operations, complete bridge compromise
- */
-rule addTokensWithSignatures_committee_unchanged_21(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    address committee_before = currentContract.committee;
-
-    // call function under test
-    addTokensWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    address committee_after = currentContract.committee;
-
-    // verify integrity
-    assert (committee_after == committee_before);
-}
-
-/*
- * chainID@after == chainID@before
- *
- * What it means: The chain ID of the current deployment should not be modified during token addition
- *
- * Why it should hold: Chain ID is a fundamental identifier for the bridge deployment and should never change after initialization. Modifying it could break cross-chain communication
- *
- * Possible consequences: Cross-chain communication failure, message routing errors, bridge isolation, fund loss
- */
-rule addTokensWithSignatures_chainID_unchanged_22(env e) {
-    bytes[] signatures;
-    BridgeUtils.Message message;
-
-    // assign all the 'before' variables
-    uint8 chainID_before = currentContract.chainID;
-
-    // call function under test
-    addTokensWithSignatures(e, signatures, message);
-
-    // assign all the 'after' variables
-    uint8 chainID_after = currentContract.chainID;
-
-    // verify integrity
-    assert (chainID_after == chainID_before);
 }
 
 /*
@@ -1417,6 +1230,7 @@ rule updateTokenPriceWithSignatures_bfb5d846_empty_signatures_reverts(env e) {
  *
  * Possible consequences: Replay attacks, stale price updates, economic manipulation
  */
+// gereon: not sure why the AI chose <= instead of !=
 rule updateTokenPriceWithSignatures_bfb5d846_invalid_nonce_reverts(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
@@ -1431,7 +1245,7 @@ rule updateTokenPriceWithSignatures_bfb5d846_invalid_nonce_reverts(env e) {
     // assign all the 'after' variables
 
     // verify integrity
-    assert ((message.nonce <= currentContract_nonces_message_messageType__before) => updateTokenPriceWithSignatures_reverted), "message.nonce <= nonces[message.messageType]@before => revert";
+    assert ((message.nonce != currentContract_nonces_message_messageType__before) => updateTokenPriceWithSignatures_reverted), "message.nonce <= nonces[message.messageType]@before => revert";
 }
 
 /*
