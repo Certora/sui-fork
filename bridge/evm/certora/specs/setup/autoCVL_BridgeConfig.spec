@@ -138,6 +138,7 @@ rule initialize_sets_chainID_6(env e) {
  *
  * Possible consequences: Cross-chain operations fail, users cannot bridge to/from intended chains, DoS of bridge functionality
  */
+// gereon: AI almost got it right. not.
 rule initialize_sets_supported_chains_7(env e) {
     address _committee;
     uint8 _chainID;
@@ -146,20 +147,18 @@ rule initialize_sets_supported_chains_7(env e) {
     uint8[] _tokenIds;
     uint8[] _suiDecimals;
     uint8[] _supportedChains;
-    uint256 i;
 
     // assign all the 'before' variables
-    uint256 _supportedChains_length_before = _supportedChains.length;
-    uint8 _supportedChains_i__before = _supportedChains[i];
 
     // call function under test
     initialize(e, _committee, _chainID, _supportedTokens, _tokenPrices, _tokenIds, _suiDecimals, _supportedChains);
 
     // assign all the 'after' variables
-    bool supportedChains__supportedChains_i__before__after = currentContract.supportedChains[_supportedChains_i__before];
 
     // verify integrity
-    assert ((_supportedChains_length_before > 0) => (supportedChains__supportedChains_i__before__after == true));
+    assert(
+        forall uint256 i. (i < _supportedChains.length) => currentContract.supportedChains[_supportedChains[i]] == true
+    );
 }
 
 /*
@@ -246,7 +245,6 @@ rule initialize_sets_token_prices_10(env e) {
     uint8[] _tokenIds;
     uint8[] _suiDecimals;
     uint8[] _supportedChains;
-    uint256 i;
 
     // assign all the 'before' variables
     require(forall uint256 i. forall uint256 j. (i < j && j < _tokenIds.length) => (_tokenIds[i] != _tokenIds[j]));
