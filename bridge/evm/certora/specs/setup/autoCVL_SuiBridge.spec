@@ -502,6 +502,7 @@ rule __bridgeERC20_no_nonce_change_on_revert_32(env e) {
  *
  * Possible consequences: Nonce tracking corruption could lead to message replay attacks or inability to process legitimate bridge messages
  */
+// gereon: the rule calls both payable and non-payable functions...
 rule bridgeETH_nonce_increments_on_success_37(env e) {
     bytes recipientAddress;
     uint8 destinationChainID;
@@ -512,14 +513,19 @@ rule bridgeETH_nonce_increments_on_success_37(env e) {
     bool paused_e__before = paused(e);
     uint64 nonces_0__before = currentContract.nonces[0];
 
+    env e2;
+    require(e.msg.sender == e2.msg.sender);
+    require(e.block == e2.block);
+    require(e.tx.origin == e2.tx.origin);
+
     // call function under test
-    bridgeETH(e, recipientAddress, destinationChainID);
+    bridgeETH(e2, recipientAddress, destinationChainID);
 
     // assign all the 'after' variables
     uint64 nonces_0__after = currentContract.nonces[0];
 
     // verify integrity
-    assert (((((e.msg.value > 0) && (recipientAddress_length_before == 32)) && committee_config_e__isChainSupported_e__destinationChainID__before) && !(paused_e__before)) => (nonces_0__after == nonces_0__before + 1));
+    assert (((((e2.msg.value > 0) && (recipientAddress_length_before == 32)) && committee_config_e__isChainSupported_e__destinationChainID__before) && !(paused_e__before)) => (nonces_0__after == nonces_0__before + 1));
 }
 
 /*
@@ -769,6 +775,7 @@ rule transferBridgedTokensWithSignatures_beb0d55c_other_nonces_unchanged(env e) 
  *
  * Possible consequences: Function confusion attacks where emergency operation messages or other message types are processed as token transfers, leading to unauthorized operations
  */
+// gereon: the AI thinks that TOKEN_TRANSFER == 1. It's not.
 rule transferBridgedTokensWithSignatures_beb0d55c_invalid_message_type_reverts(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
@@ -782,7 +789,7 @@ rule transferBridgedTokensWithSignatures_beb0d55c_invalid_message_type_reverts(e
     // assign all the 'after' variables
 
     // verify integrity
-    assert ((message.messageType != 1) => transferBridgedTokensWithSignatures_reverted), "message.messageType != 1 => revert";
+    assert ((message.messageType != BridgeUtils.TOKEN_TRANSFER(e)) => transferBridgedTokensWithSignatures_reverted), "message.messageType != BridgeUtils.TOKEN_TRANSFER => revert";
 }
 
 /*
@@ -1569,7 +1576,8 @@ rule bridgeETH_9449ebd2_valid_transfer_increments_nonce(env e) {
  * Possible consequences: Fund loss, accounting discrepancies, inability to fulfill withdrawal requests, and broken bridge economics
  */
 // gereon: the rule calls both payable and non-payable functions...
-rule bridgeETH_9449ebd2_vault_receives_eth(env e) {
+// TODO: not entirely sure how to check these native transfers, given that we use optimistic_fallback
+rule __bridgeETH_9449ebd2_vault_receives_eth(env e) {
     bytes recipientAddress;
     uint8 destinationChainID;
 
@@ -1590,7 +1598,7 @@ rule bridgeETH_9449ebd2_vault_receives_eth(env e) {
     uint256 nativeBalances_currentContract_vault__after = nativeBalances[currentContract.vault];
 
     // verify integrity
-    assert (((((e2.msg.value > 0) && (recipientAddress.length == 32)) && !(paused_e__before)) && currentContract_committee_config_e__isChainSupported_e__destinationChainID__before) => (nativeBalances_currentContract_vault__after == nativeBalances_currentContract_vault__before + e.msg.value)), "msg.value > 0 && recipientAddress.length == 32 && !paused()@before && committee@before.config().isChainSupported(destinationChainID) => vault@after.balance == vault@before.balance + msg.value";
+    assert (((((e2.msg.value > 0) && (recipientAddress.length == 32)) && !(paused_e__before)) && currentContract_committee_config_e__isChainSupported_e__destinationChainID__before) => (nativeBalances_currentContract_vault__after == nativeBalances_currentContract_vault__before + e2.msg.value)), "msg.value > 0 && recipientAddress.length == 32 && !paused()@before && committee@before.config().isChainSupported(destinationChainID) => vault@after.balance == vault@before.balance + msg.value";
 }
 
 /*
@@ -1631,21 +1639,22 @@ rule __bridgeETH_9449ebd2_nonce_unchanged_on_revert(env e) {
  *
  * Possible consequences: Accounting corruption, fund leakage, and potential exploitation of failed transaction states
  */
-rule bridgeETH_9449ebd2_vault_balance_unchanged_on_revert(env e) {
-    bytes recipientAddress;
-    uint8 destinationChainID;
-
-    // assign all the 'before' variables
-    bool paused_e__before = paused(e);
-    bool currentContract_committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
-    uint256 nativeBalances_currentContract_vault__before = nativeBalances[currentContract.vault];
-
-    // call function under test
-    bridgeETH(e, recipientAddress, destinationChainID);
-
-    // assign all the 'after' variables
-    uint256 nativeBalances_currentContract_vault__after = nativeBalances[currentContract.vault];
-
-    // verify integrity
-    assert (((((e.msg.value == 0) || (recipientAddress.length != 32)) || paused_e__before) || !(currentContract_committee_config_e__isChainSupported_e__destinationChainID__before)) => (nativeBalances_currentContract_vault__after == nativeBalances_currentContract_vault__before)), "msg.value == 0 || recipientAddress.length != 32 || paused()@before || !committee@before.config().isChainSupported(destinationChainID) => vault@after.balance == vault@before.balance";
-}
+// gereon: this should be a revert rule, I guess, but it doesn't check for revert?
+//rule bridgeETH_9449ebd2_vault_balance_unchanged_on_revert(env e) {
+//    bytes recipientAddress;
+//    uint8 destinationChainID;
+//
+//    // assign all the 'before' variables
+//    bool paused_e__before = paused(e);
+//    bool currentContract_committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
+//    uint256 nativeBalances_currentContract_vault__before = nativeBalances[currentContract.vault];
+//
+//    // call function under test
+//    bridgeETH(e, recipientAddress, destinationChainID);
+//
+//    // assign all the 'after' variables
+//    uint256 nativeBalances_currentContract_vault__after = nativeBalances[currentContract.vault];
+//
+//    // verify integrity
+//    assert (((((e.msg.value == 0) || (recipientAddress.length != 32)) || paused_e__before) || !(currentContract_committee_config_e__isChainSupported_e__destinationChainID__before)) => (nativeBalances_currentContract_vault__after == nativeBalances_currentContract_vault__before)), "msg.value == 0 || recipientAddress.length != 32 || paused()@before || !committee@before.config().isChainSupported(destinationChainID) => vault@after.balance == vault@before.balance";
+//}

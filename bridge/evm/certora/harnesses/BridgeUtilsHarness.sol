@@ -8,6 +8,7 @@ contract BridgeUtilsHarness {
     uint8 public constant USDC = BridgeUtils.USDC;
     uint8 public constant USDT = BridgeUtils.USDT;
 
+    uint8 public constant TOKEN_TRANSFER = BridgeUtils.TOKEN_TRANSFER;
     uint8 public constant BLOCKLIST = BridgeUtils.BLOCKLIST;
     uint8 public constant EMERGENCY_OP = BridgeUtils.EMERGENCY_OP;
     uint8 public constant UPDATE_BRIDGE_LIMIT = BridgeUtils.UPDATE_BRIDGE_LIMIT;
