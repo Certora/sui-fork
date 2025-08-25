@@ -1345,7 +1345,8 @@ rule addTokensWithSignatures_43025664_empty_payload_reverts(env e) {
  *
  * Possible consequences: State corruption, loss of existing token configurations, and potential bridge malfunction leading to fund loss
  */
-rule addTokensWithSignatures_43025664_already_supported_reverts(env e) {
+// gereon: _addToken explicitly says "Updates the token". That's a bit misleading...
+rule __addTokensWithSignatures_43025664_already_supported_reverts(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
     uint8 tokenID;
@@ -1451,6 +1452,7 @@ rule addTokensWithSignatures_43025664_preserves_supported_chains(env e) {
  *
  * Possible consequences: Replay attacks allowing duplicate token additions and potential state corruption
  */
+// gereon: again, the AI things <= would be appropriate.
 rule addTokensWithSignatures_43025664_invalid_nonce_reverts(env e) {
     bytes[] signatures;
     BridgeUtils.Message message;
@@ -1465,7 +1467,7 @@ rule addTokensWithSignatures_43025664_invalid_nonce_reverts(env e) {
     // assign all the 'after' variables
 
     // verify integrity
-    assert ((message.nonce <= currentContract_nonces_message_messageType__before) => addTokensWithSignatures_reverted), "message.nonce <= nonces[message.messageType]@before => revert";
+    assert ((message.nonce != currentContract_nonces_message_messageType__before) => addTokensWithSignatures_reverted), "message.nonce <= nonces[message.messageType]@before => revert";
 }
 
 /*
