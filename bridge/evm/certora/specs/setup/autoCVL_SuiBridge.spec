@@ -1534,7 +1534,7 @@ rule bridgeETH_9449ebd2_paused_reverts(env e) {
  *
  * Possible consequences: Nonce collision attacks, replay attacks, message ordering issues, and potential double-spending on the destination chain
  */
-// TODO: I suspect the generic payable().call{} always reverts...
+// gereon: the rule calls both payable and non-payable functions...
 rule bridgeETH_9449ebd2_valid_transfer_increments_nonce(env e) {
     bytes recipientAddress;
     uint8 destinationChainID;
@@ -1544,14 +1544,19 @@ rule bridgeETH_9449ebd2_valid_transfer_increments_nonce(env e) {
     bool isChainSupported_before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
     uint64 currentContract_nonces_0__before = currentContract.nonces[0];
 
+    env e2;
+    require(e.msg.sender == e2.msg.sender);
+    require(e.block == e2.block);
+    require(e.tx.origin == e2.tx.origin);
+
     // call function under test
-    bridgeETH(e, recipientAddress, destinationChainID);
+    bridgeETH(e2, recipientAddress, destinationChainID);
 
     // assign all the 'after' variables
     uint64 currentContract_nonces_0__after = currentContract.nonces[0];
 
     // verify integrity
-    assert (((((e.msg.value > 0) && (recipientAddress.length == 32)) && !(paused_e__before)) && isChainSupported_before) => (currentContract_nonces_0__after == currentContract_nonces_0__before + 1)), "msg.value > 0 && recipientAddress.length == 32 && !paused()@before && committee@before.config().isChainSupported(destinationChainID) => nonces[0]@after == nonces[0]@before + 1";
+    assert (((((e2.msg.value > 0) && (recipientAddress.length == 32)) && !(paused_e__before)) && isChainSupported_before) => (currentContract_nonces_0__after == currentContract_nonces_0__before + 1)), "msg.value > 0 && recipientAddress.length == 32 && !paused()@before && committee@before.config().isChainSupported(destinationChainID) => nonces[0]@after == nonces[0]@before + 1";
 }
 
 /*
@@ -1563,6 +1568,7 @@ rule bridgeETH_9449ebd2_valid_transfer_increments_nonce(env e) {
  *
  * Possible consequences: Fund loss, accounting discrepancies, inability to fulfill withdrawal requests, and broken bridge economics
  */
+// gereon: the rule calls both payable and non-payable functions...
 rule bridgeETH_9449ebd2_vault_receives_eth(env e) {
     bytes recipientAddress;
     uint8 destinationChainID;
@@ -1572,14 +1578,19 @@ rule bridgeETH_9449ebd2_vault_receives_eth(env e) {
     bool currentContract_committee_config_e__isChainSupported_e__destinationChainID__before = currentContract.committee.config(e).isChainSupported(e, destinationChainID);
     uint256 nativeBalances_currentContract_vault__before = nativeBalances[currentContract.vault];
 
+    env e2;
+    require(e.msg.sender == e2.msg.sender);
+    require(e.block == e2.block);
+    require(e.tx.origin == e2.tx.origin);
+
     // call function under test
-    bridgeETH(e, recipientAddress, destinationChainID);
+    bridgeETH(e2, recipientAddress, destinationChainID);
 
     // assign all the 'after' variables
     uint256 nativeBalances_currentContract_vault__after = nativeBalances[currentContract.vault];
 
     // verify integrity
-    assert (((((e.msg.value > 0) && (recipientAddress.length == 32)) && !(paused_e__before)) && currentContract_committee_config_e__isChainSupported_e__destinationChainID__before) => (nativeBalances_currentContract_vault__after == nativeBalances_currentContract_vault__before + e.msg.value)), "msg.value > 0 && recipientAddress.length == 32 && !paused()@before && committee@before.config().isChainSupported(destinationChainID) => vault@after.balance == vault@before.balance + msg.value";
+    assert (((((e2.msg.value > 0) && (recipientAddress.length == 32)) && !(paused_e__before)) && currentContract_committee_config_e__isChainSupported_e__destinationChainID__before) => (nativeBalances_currentContract_vault__after == nativeBalances_currentContract_vault__before + e.msg.value)), "msg.value > 0 && recipientAddress.length == 32 && !paused()@before && committee@before.config().isChainSupported(destinationChainID) => vault@after.balance == vault@before.balance + msg.value";
 }
 
 /*
