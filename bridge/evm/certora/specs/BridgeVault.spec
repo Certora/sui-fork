@@ -14,6 +14,9 @@ definition ReentrancyGuard_ENTERED() returns uint256 = 2;
 
 ghost mapping(address => mapping(address => uint256)) tokenBalances;
 ghost bool unprotectedReentrancy;
+ghost bool vaultApprovedWeth {
+    init_state axiom !vaultApprovedWeth;
+}
 
 hook CALL(uint g, address addr, uint value, uint argsOffset, uint argsLength, uint retOffset, uint retLength) uint rc {
     if (currentContract._status != ReentrancyGuard_ENTERED()) {
@@ -48,8 +51,8 @@ hook Sload uint256 v WETH.(slot 3)[KEY address a] {
  * slot 4 is allowance.
  */
 hook Sstore WETH.(slot 4)[KEY address owner][KEY address spender] uint256 allowance {
-    if (owner == currentContract) {
-        assert(allowance == 0, "Vault must never set any allowance");
+    if (owner == currentContract && allowance != 0) {
+        vaultApprovedWeth = true;
     }
 }
 
@@ -59,10 +62,16 @@ hook Sstore WETH.(slot 4)[KEY address owner][KEY address spender] uint256 allowa
  */
 hook Sload uint256 allowance WETH.(slot 4)[KEY address owner][KEY address spender] {
     if (owner == currentContract) {
-        require(allowance == 0, "Vault never set any allowance");
+        require(allowance != 0 => vaultApprovedWeth, "Vault approved WETH");
     }
 }
 
+strong invariant vault_approval() !vaultApprovedWeth
+{
+    preserved with (env e) {
+        require e.msg.sender != currentContract;
+    }
+}
 
 function CVL_balanceOf(env e, address token, address a) returns uint256 {
     if (token == WETH) {
@@ -101,6 +110,7 @@ rule only_owner_can_transfer_out(method f, address token) {
     env e;
     calldataarg args;
 
+    requireInvariant vault_approval();
     address ownerBefore = currentContract.owner();
     mathint balanceBefore = CVL_balanceOf(e, token, currentContract);
     f(e, args);
