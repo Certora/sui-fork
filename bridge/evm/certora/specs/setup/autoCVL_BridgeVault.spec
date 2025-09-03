@@ -573,6 +573,7 @@ rule transferERC20_9db5dbe4_valid_transfer_recipient_increases(env e) {
  *
  * Possible consequences: Reentrancy vulnerabilities, potential for double-spending attacks, state manipulation
  */
+// Jochen: invalid rule; reentrancy locks are not permanently changed.
 rule transferERC20_9db5dbe4_reentrancy_status_set(env e) {
     address tokenAddress;
     address recipientAddress;

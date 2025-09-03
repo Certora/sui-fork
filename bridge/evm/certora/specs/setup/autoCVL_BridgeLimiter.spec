@@ -852,15 +852,16 @@ rule recordBridgeTransfers_9373d391_updates_hourly_transfer_amount(env e) {
 }
 
 /*
- * hourTimestamp != currentHour()@before => chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@after == chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@before
+ * hourTimestamp != currentHour()@before && hourTimestamp > currentHour_e_before - 24 => chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@after == chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@before
  *
- * What it means: Transfer amounts for hours other than the current hour should remain unchanged when recording a new transfer
+ * What it means: Transfer amounts for hours other than the current hour should remain unchanged when recording a new transfer.
+ * We allow changing of transfer amounts for hours outside of the 24 hour window, to allow garbage collection.
  *
  * Why it should hold: Only the current hour's bucket should be updated when recording a new transfer, preserving historical data integrity
  *
  * Possible consequences: Corruption of historical transfer data, incorrect rolling window calculations, potential manipulation of past records
  */
-// gereon: the function garbage collects expired hours... rule can be adapted, I guess
+// jochen: allow changing of transfer amounts for hours outside of the 24 hour window
 rule __recordBridgeTransfers_9373d391_other_hours_unchanged(env e) {
     uint8 chainID;
     uint8 tokenID;
@@ -879,7 +880,7 @@ rule __recordBridgeTransfers_9373d391_other_hours_unchanged(env e) {
     uint256 chainHourlyTransferAmount_after = currentContract.chainHourlyTransferAmount[getChainHourTimestampKey_before];
 
     // verify integrity
-    assert ((hourTimestamp != currentHour_e__before) => (chainHourlyTransferAmount_after == chainHourlyTransferAmount_before)), "hourTimestamp != currentHour()@before => chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@after == chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@before";
+    assert ((hourTimestamp != currentHour_e__before && hourTimestamp != currentHour_e__before - 25) => (chainHourlyTransferAmount_after == chainHourlyTransferAmount_before)), "hourTimestamp != currentHour()@before => chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@after == chainHourlyTransferAmount[getChainHourTimestampKey(chainID, hourTimestamp)@before]@before";
 }
 
 /*
