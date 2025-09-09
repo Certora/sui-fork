@@ -149,3 +149,109 @@ filtered {
     assert statusBefore == ReentrancyGuard_NOT_ENTERED() && statusAfter == statusBefore;
     assert !unprotectedReentrancy;
 }
+
+rule transferERC20_integrity {
+    env e;
+    address token;
+    address recipient;
+    uint256 value;
+    address balanceToken;
+    address balanceAddress;
+
+
+    require recipient != currentContract, "No self transfer";
+    uint256 balanceBefore = CVL_balanceOf(e,  balanceToken, balanceAddress);
+    uint256 nativeBalanceBefore = nativeBalances[balanceAddress];
+    currentContract.transferERC20(e, token, recipient, value);
+    uint256 balanceAfter = CVL_balanceOf(e,  balanceToken, balanceAddress);
+    uint256 nativeBalanceAfter = nativeBalances[balanceAddress];
+
+    mathint balanceDiff = balanceAfter - balanceBefore;
+    mathint nativeBalanceDiff = nativeBalanceAfter - nativeBalanceBefore;
+
+    assert nativeBalanceDiff == 0, "No native balance change expected";
+    assert balanceToken != token =>  balanceDiff == 0, "Balance of uninvolved tokens should not change";
+    assert balanceAddress != currentContract && balanceAddress != recipient => balanceDiff == 0, "Balance of uninvolved addresses should not change";
+    assert balanceToken == token && balanceAddress == currentContract => balanceDiff == -value, "Balance of vault should decrease by amount";
+    assert balanceToken == token && balanceAddress == recipient => balanceDiff == value, "Balance of recipient should increase by amount";
+}
+
+rule transferERC20_self {
+    env e;
+    address token;
+    address recipient;
+    uint256 value;
+    address balanceToken;
+    address balanceAddress;
+
+    require recipient == currentContract, "self transfer";
+
+    uint256 balanceBefore = CVL_balanceOf(e,  balanceToken, balanceAddress);
+    uint256 nativeBalanceBefore = nativeBalances[balanceAddress];
+    currentContract.transferERC20(e, token, recipient, value);
+    uint256 balanceAfter = CVL_balanceOf(e,  balanceToken, balanceAddress);
+    uint256 nativeBalanceAfter = nativeBalances[balanceAddress];
+
+    mathint balanceDiff = balanceAfter - balanceBefore;
+    mathint nativeBalanceDiff = nativeBalanceAfter - nativeBalanceBefore;
+
+    assert balanceDiff == 0 && nativeBalanceDiff == 0, "No balance change expected";
+}
+
+rule transferETH_integrity {
+    env e;
+    address recipient;
+    uint256 value;
+    address balanceToken;
+    address balanceAddress;
+
+    require recipient != currentContract && recipient != WETH, "No self transfer";
+
+    uint256 balanceBefore = CVL_balanceOf(e,  balanceToken, balanceAddress);
+    uint256 nativeBalanceBefore = nativeBalances[balanceAddress];
+    currentContract.transferETH(e, recipient, value);
+    uint256 balanceAfter = CVL_balanceOf(e,  balanceToken, balanceAddress);
+    uint256 nativeBalanceAfter = nativeBalances[balanceAddress];
+
+    mathint balanceDiff = balanceAfter - balanceBefore;
+    mathint nativeBalanceDiff = nativeBalanceAfter - nativeBalanceBefore;
+
+    assert balanceToken != WETH => balanceDiff == 0, "Balance of uninvolved tokens should not change";
+    assert balanceAddress != currentContract && balanceAddress != recipient && balanceAddress != WETH => balanceDiff == 0 && nativeBalanceDiff == 0, "Balance of uninvolved addresses should not change";
+    assert balanceToken == WETH && balanceAddress == currentContract => balanceDiff == -value && nativeBalanceDiff == 0, "Balance of vault in WETH should decrease by amount";
+    assert balanceAddress == recipient => balanceDiff == 0 && nativeBalanceDiff == value, "Native balance of recipient should increase by amount";
+    assert balanceAddress == WETH => balanceDiff == 0 && nativeBalanceDiff == -value, "Native balance of WETH should decrease by amount";
+}
+
+rule transferETH_self {
+    env e;
+    address recipient;
+    uint256 value;
+    address balanceToken;
+    address balanceAddress;
+
+    require recipient == currentContract || recipient == WETH, "self transfer";
+
+    uint256 balanceBefore = CVL_balanceOf(e,  balanceToken, balanceAddress);
+    uint256 nativeBalanceBefore = nativeBalances[balanceAddress];
+    currentContract.transferETH(e, recipient, value);
+    uint256 balanceAfter = CVL_balanceOf(e,  balanceToken, balanceAddress);
+    uint256 nativeBalanceAfter = nativeBalances[balanceAddress];
+
+    mathint balanceDiff = balanceAfter - balanceBefore;
+    mathint nativeBalanceDiff = nativeBalanceAfter - nativeBalanceBefore;
+
+    assert balanceDiff == 0 && nativeBalanceDiff == 0, "No balance change expected";
+}
+
+invariant nativeVaultBalance()
+    nativeBalances[currentContract] == 0
+{
+    preserved with (env e) {
+        // There are two reasons why this is necessary:
+        // 1. WETH sending to currentContract will change the native balance.
+        // 2. The vault itself withdrawing from WETH will change the native balance.
+        // Both cases can only be done by going through transferETH.  We check that transferETH preserves the invariant.
+        require e.msg.sender != currentContract && e.msg.sender != WETH, "prevent unexpected calls from WETH or Vault itself";
+    }
+}
