@@ -61,6 +61,39 @@ strong invariant reentrancyguard_valid()
     currentContract.ext_openzeppelin_storage_ReentrancyGuard._status == ReentrancyGuard_ENTERED()
     || currentContract.ext_openzeppelin_storage_ReentrancyGuard._status == ReentrancyGuard_NOT_ENTERED();
 
+rule nonReentrant_status_preserved(method f)
+{
+    env e;
+    calldataarg args;
+
+    requireInvariant reentrancyguard_valid();
+
+    uint256 statusBefore = currentContract.ext_openzeppelin_storage_ReentrancyGuard._status;
+    f(e,args);
+    uint256 statusAfter = currentContract.ext_openzeppelin_storage_ReentrancyGuard._status;
+    assert statusBefore == statusAfter;
+}
+
+rule nonReentrant_functions(method f)
+filtered {
+    f -> f.selector == sig:bridgeERC20(uint8,uint256,bytes,uint8).selector
+        || f.selector == sig:bridgeETH(bytes,uint8).selector
+        || f.selector == sig:transferBridgedTokensWithSignatures(bytes[],BridgeUtils.Message).selector
+}
+{
+    env e;
+    calldataarg args;
+
+    requireInvariant reentrancyguard_valid();
+
+    unprotectedReentrancy = false;
+    uint256 statusBefore = currentContract.ext_openzeppelin_storage_ReentrancyGuard._status;
+    f(e,args);
+    uint256 statusAfter = currentContract.ext_openzeppelin_storage_ReentrancyGuard._status;
+    assert statusBefore == ReentrancyGuard_NOT_ENTERED() && statusAfter == statusBefore;
+    assert !unprotectedReentrancy;
+}
+
 /**
  * Check that nonces will only increase and by at most one per operation.
  * Nonces are used for outgoing transfers to give every transfer a different
@@ -107,6 +140,7 @@ rule transferBridgedTokens_integrity() {
     BridgeUtils.Message message;
     uint64 nonce = message.nonce;
 
+    bool pausedBefore = currentContract.ext_openzeppelin_storage_Pausable._paused;
     bool processedBefore = currentContract.isTransferProcessed(nonce);
     currentContract.transferBridgedTokensWithSignatures(e, signatures, message);
     bool processedAfter = currentContract.isTransferProcessed(nonce);
@@ -115,6 +149,7 @@ rule transferBridgedTokens_integrity() {
     //    currentContract.decodeTokenTransferPayloadWrapper@withrevert(message.payload);
     //assert !lastReverted;
 
+    assert !pausedBefore;
     assert !processedBefore;
     assert processedAfter;
     assert BridgeConfig.isChainSupported(message.chainID);
@@ -130,11 +165,12 @@ rule bridgeERC20_integrity {
     bytes recipient;
     uint8 destChainId;
 
+    bool pausedBefore = currentContract.ext_openzeppelin_storage_Pausable._paused;
     uint64 transferNonceBefore = currentContract.nonces[0];
     currentContract.bridgeERC20(e, tokenId, amount, recipient, destChainId);
     uint64 transferNonceAfter = currentContract.nonces[0];
 
-
+    assert !pausedBefore;
     assert recipient.length == 32;
     assert BridgeConfig.isChainSupported(destChainId);
     assert BridgeConfig.isTokenSupported(tokenId);
@@ -147,18 +183,17 @@ rule bridgeETH_integrity {
     bytes recipient;
     uint8 destChainId;
 
+    bool pausedBefore = currentContract.ext_openzeppelin_storage_Pausable._paused;
     uint64 transferNonceBefore = currentContract.nonces[0];
     currentContract.bridgeETH(e, recipient, destChainId);
     uint64 transferNonceAfter = currentContract.nonces[0];
 
-
+    assert !pausedBefore;
     assert recipient.length == 32;
     assert BridgeConfig.isChainSupported(destChainId);
     assert e.msg.value > 0;
     assert transferNonceAfter == transferNonceBefore + 1;
 }
-
-
 
 rule tokenDepositedImpliesTokenVaulted(method f) {
     env e;
@@ -183,4 +218,19 @@ rule tokenDepositedImpliesTokenVaulted(method f) {
     assert numTokenDepositedLogs <= 1, "At most one token deposited";
     assert numTokenDepositedLogs == 1 && token == lastTransferredToken => 
         tokenBalanceAfter > tokenBalanceBefore, "Tokens should be transferred";
+}
+
+rule only_emergency_operation_changes_pause_status(method f)
+filtered {
+    f -> f.selector != sig:executeEmergencyOpWithSignatures(bytes[],BridgeUtils.Message).selector
+}
+{
+    env e;
+    calldataarg args;
+
+    bool pausedBefore = currentContract.ext_openzeppelin_storage_Pausable._paused;
+    f(e, args);
+    bool pausedAfter = currentContract.ext_openzeppelin_storage_Pausable._paused;
+
+    assert pausedBefore == pausedAfter;
 }
