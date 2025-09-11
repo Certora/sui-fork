@@ -31,6 +31,8 @@ methods {
     function BridgeUtilsHarness.convertSuiToERC20DecimalWrapper(uint8 erc20Decimal, uint8 suiDecimal, uint64 amount) external returns (uint256) envfree;
 
     function BridgeCommittee.verifySignatures(bytes[] signatures, BridgeUtils.Message message) external => CVL_verifySignatures(message); 
+
+    function BridgeVault.owner() external returns (address) envfree;
 }
 
 definition ReentrancyGuard_NOT_ENTERED() returns uint256 = 1;
@@ -181,11 +183,14 @@ rule transferBridgedTokens_integrity() {
         BridgeUtilsHarness.decodeTokenTransferPayloadWrapper@withrevert(message.payload);
     assert !lastReverted;
     
+    require token == BridgeConfig.tokenAddressOf(tokenTransferPayload.tokenID),
+        "assume we picked right token in the beginning";
     uint256 amount = BridgeUtilsHarness.convertSuiToERC20DecimalWrapper(
         CVL_decimals(token), BridgeConfig.tokenSuiDecimalOf(tokenTransferPayload.tokenID), 
         tokenTransferPayload.amount);
     // check that token balances change correctly
     if (tokenTransferPayload.tokenID == BridgeUtilsHarness.ETH()) {
+        // Note that we also assume that the bridge is configured correctly, i.e. WETH is the token for tokenID ETH().
         require token == WETH, "This will always transfer WETH, regardless of BridgeConfig";
         if (tokenTransferPayload.recipientAddress == BridgeVault ||
             tokenTransferPayload.recipientAddress == WETH) {
@@ -208,8 +213,6 @@ rule transferBridgedTokens_integrity() {
             }        
         }
     } else {
-        require token == BridgeConfig.tokenAddressOf(tokenTransferPayload.tokenID),
-            "assume we picked right token in the beginning";
         assert nativeBalanceBefore == nativeBalanceAfter;
         if (BridgeVault == tokenTransferPayload.recipientAddress) {
             assert balanceBefore == balanceAfter;
@@ -302,12 +305,17 @@ rule tokenDepositedImpliesTokenVaulted(method f) {
 
 rule only_transferBridgedTokens_can_remove_tokens(method f) 
 filtered {
-    f -> f.selector != sig:transferBridgedTokensWithSignatures(bytes[],BridgeUtils.Message).selector
+    f -> f.selector != sig:transferBridgedTokensWithSignatures(bytes[],BridgeUtils.Message).selector &&
+         f.contract != WETH // ignore calling transferFrom or transfer on the token directly
 }
 {
     env e;
     calldataarg args;
     address token;
+
+    // Exclude the counterexamples where someone impersonates the contract and uses the Vault's functions to transfer.
+    require e.msg.sender != currentContract, "SuiBridge must not be impersonated";
+    require BridgeVault.owner() == currentContract, "Vault must be owned by SuiBridge";
 
     // prevent overflow in old WETH contract
     require(e.msg.value < 2^128, "It's impossible to own this much ETH");
