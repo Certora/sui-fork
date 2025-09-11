@@ -188,15 +188,25 @@ rule transferBridgedTokens_integrity() {
         tokenTransferPayload.amount);
     // check that token balances change correctly
     if (tokenTransferPayload.tokenID == BridgeUtilsHarness.ETH()) {
-        if (balanceAddress == tokenTransferPayload.recipientAddress) {
-            assert nativeBalanceAfter == nativeBalanceBefore + amount;
-        } else {
-            assert nativeBalanceAfter == nativeBalanceBefore;
-        }        
-        if (balanceAddress == BridgeVault) {
-            assert balanceAfter == balanceBefore - amount;
-        } else {
+        if (tokenTransferPayload.recipientAddress == BridgeVault ||
+            tokenTransferPayload.recipientAddress == WETH) {
+            // Sending ETH to the vault or to the WETH contract will deposit them as WETH again.
+            // Therefore, no balance change.
             assert balanceAfter == balanceBefore;
+            assert nativeBalanceAfter == nativeBalanceBefore;
+        } else {
+            if (balanceAddress == BridgeVault) {
+                assert balanceAfter == balanceBefore - amount;
+            } else {
+                assert balanceAfter == balanceBefore;
+            }
+            if (balanceAddress == tokenTransferPayload.recipientAddress) {
+                assert nativeBalanceAfter == nativeBalanceBefore + amount;
+            } else if (balanceAddress == WETH) {
+                assert nativeBalanceAfter == nativeBalanceBefore - amount;
+            } else {
+                assert nativeBalanceAfter == nativeBalanceBefore;
+            }        
         }
     } else {
         assert nativeBalanceBefore == nativeBalanceAfter;
@@ -316,12 +326,14 @@ rule executeEmergencyOp_integrity() {
     bytes[] signatures;
     BridgeUtils.Message message;
 
+    uint64 nonceBefore = currentContract.nonces[BridgeUtilsHarness.EMERGENCY_OP()];
+
     currentContract.executeEmergencyOpWithSignatures(e, signatures, message);
 
     bool pausedAfter = currentContract.ext_openzeppelin_storage_Pausable._paused;
-    uint64 nonceBefore = currentContract.nonces[BridgeUtilsHarness.EMERGENCY_OP()];
-    bool isFreezing = BridgeUtilsHarness.decodeEmergencyOpPayloadWrapper@withrevert(message.payload);
     uint64 nonceAfter = currentContract.nonces[BridgeUtilsHarness.EMERGENCY_OP()];
+
+    bool isFreezing = BridgeUtilsHarness.decodeEmergencyOpPayloadWrapper@withrevert(message.payload);
     assert !lastReverted;
     
     assert pausedAfter == isFreezing;
