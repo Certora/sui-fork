@@ -5,6 +5,7 @@ import "setup/snippet_uups.spec";
 
 using BridgeConfig as BridgeConfig;
 using BridgeVault as BridgeVault;
+using BridgeUtilsHarness as BridgeUtilsHarness;
 
 methods {
     function BridgeVault.owner() external returns address envfree;
@@ -18,7 +19,18 @@ methods {
     function BridgeConfig.isChainSupported(uint8 chainId) external returns (bool) envfree;
     function BridgeConfig.isTokenSupported(uint8 tokenID) external returns (bool) envfree;
     function BridgeConfig.tokenAddressOf(uint8 tokenID) external returns (address) envfree;
+    function BridgeConfig.tokenSuiDecimalOf(uint8 tokenID) external returns (uint8) envfree;
     function SuiBridgeHarness.isTransferProcessed(uint64 nonce) external returns (bool) envfree;
+
+    function BridgeUtilsHarness.ETH() external returns (uint8) envfree;
+    function BridgeUtilsHarness.TOKEN_TRANSFER() external returns (uint8) envfree;
+    function BridgeUtilsHarness.EMERGENCY_OP() external returns (uint8) envfree;
+    function BridgeUtilsHarness.decodeTokenTransferPayloadWrapper(bytes _payload) external returns (BridgeUtils.TokenTransferPayload) envfree;
+    function BridgeUtilsHarness.decodeEmergencyOpPayloadWrapper(bytes _payload) external returns (bool) envfree;
+    function BridgeUtilsHarness.convertERC20ToSuiDecimalWrapper(uint8 erc20Decimal, uint8 suiDecimal, uint256 amount) external returns (uint64) envfree;
+    function BridgeUtilsHarness.convertSuiToERC20DecimalWrapper(uint8 erc20Decimal, uint8 suiDecimal, uint64 amount) external returns (uint256) envfree;
+
+    function BridgeCommittee.verifySignatures(bytes[] signatures, BridgeUtils.Message message) external => CVL_verifySignatures(message); 
 }
 
 definition ReentrancyGuard_NOT_ENTERED() returns uint256 = 1;
@@ -45,7 +57,8 @@ ghost mathint depositedLogDestinationChainID;
 
 hook LOG4(uint offset, uint length, bytes32 t1, bytes32 t2, bytes32 t3, bytes32 t4)
 {
-    if (t1 == to_bytes32(0xa0f1d54820817ede8517e70a3d0a9197c015471c5360d2119b759f0359858ce6)) {
+    if (t1 == to_bytes32(0xa0f1d54820817ede8517e70a3d0a9197c015471c5360d2119b759f0359858ce6)
+        && executingContract == currentContract) {
         numTokenDepositedLogs = numTokenDepositedLogs + 1;
         depositedLogSourceChainID = assert_uint256(t2);
         depositedLogNonce = assert_uint256(t3);
@@ -53,6 +66,17 @@ hook LOG4(uint offset, uint length, bytes32 t1, bytes32 t2, bytes32 t3, bytes32 
     }
 }
 
+ghost bool verifySignaturesSuccessful;
+ghost uint8 verifySignaturesMessageType;
+
+function CVL_verifySignatures(BridgeUtils.Message message) {
+    bool nondet;
+    if (nondet) {
+        revert();
+    }
+    verifySignaturesSuccessful = true;
+    verifySignaturesMessageType = message.messageType;
+}
 
 invariant reentrancyguard_not_entered() 
     currentContract.ext_openzeppelin_storage_ReentrancyGuard._status == ReentrancyGuard_NOT_ENTERED();
@@ -67,6 +91,7 @@ rule nonReentrant_status_preserved(method f)
     calldataarg args;
 
     requireInvariant reentrancyguard_valid();
+    require currentContract.ext_openzeppelin_storage_Initializable._initialized > 0, "Contract is initialized";
 
     uint256 statusBefore = currentContract.ext_openzeppelin_storage_ReentrancyGuard._status;
     f(e,args);
@@ -139,22 +164,61 @@ rule transferBridgedTokens_integrity() {
     bytes[] signatures;
     BridgeUtils.Message message;
     uint64 nonce = message.nonce;
+    address token;
+    address balanceAddress;
 
+    uint256 balanceBefore = CVL_balanceOf(token, balanceAddress);
+    uint256 nativeBalanceBefore = nativeBalances[balanceAddress];
     bool pausedBefore = currentContract.ext_openzeppelin_storage_Pausable._paused;
     bool processedBefore = currentContract.isTransferProcessed(nonce);
     currentContract.transferBridgedTokensWithSignatures(e, signatures, message);
+    uint256 balanceAfter = CVL_balanceOf(token, balanceAddress);
+    uint256 nativeBalanceAfter = nativeBalances[balanceAddress];
     bool processedAfter = currentContract.isTransferProcessed(nonce);
 
-    //BridgeUtils.TokenTransferPayload tokenTransferPayload =
-    //    currentContract.decodeTokenTransferPayloadWrapper@withrevert(message.payload);
-    //assert !lastReverted;
+    BridgeUtils.TokenTransferPayload tokenTransferPayload;
+    tokenTransferPayload =
+        BridgeUtilsHarness.decodeTokenTransferPayloadWrapper@withrevert(message.payload);
+    assert !lastReverted;
+    
+    require token == BridgeConfig.tokenAddressOf(tokenTransferPayload.tokenID),
+        "assume we picked right token in the beginning";
+    uint256 amount = BridgeUtilsHarness.convertSuiToERC20DecimalWrapper(
+        CVL_decimals(token), BridgeConfig.tokenSuiDecimalOf(tokenTransferPayload.tokenID), 
+        tokenTransferPayload.amount);
+    // check that token balances change correctly
+    if (tokenTransferPayload.tokenID == BridgeUtilsHarness.ETH()) {
+        if (balanceAddress == tokenTransferPayload.recipientAddress) {
+            assert nativeBalanceAfter == nativeBalanceBefore + amount;
+        } else {
+            assert nativeBalanceAfter == nativeBalanceBefore;
+        }        
+        if (balanceAddress == BridgeVault) {
+            assert balanceAfter == balanceBefore - amount;
+        } else {
+            assert balanceAfter == balanceBefore;
+        }
+    } else {
+        assert nativeBalanceBefore == nativeBalanceAfter;
+        if (BridgeVault == tokenTransferPayload.recipientAddress) {
+            assert balanceBefore == balanceAfter;
+        } else if (balanceAddress == tokenTransferPayload.recipientAddress) {
+            assert balanceAfter == balanceBefore + amount;
+        } else if (balanceAddress == BridgeVault) {
+            assert balanceAfter == balanceBefore - amount;
+        } else {
+            assert balanceAfter == balanceBefore;
+        }
+    }
 
     assert !pausedBefore;
     assert !processedBefore;
     assert processedAfter;
     assert BridgeConfig.isChainSupported(message.chainID);
-    //assert BridgeConfig.chainID() == tokenTransferPayload.targetChain;
-    //assert BridgeConfig.isTokenSupported(tokenTransferPayload.tokenID);
+    assert BridgeConfig.chainID() == tokenTransferPayload.targetChain;
+    assert BridgeConfig.isTokenSupported(tokenTransferPayload.tokenID);
+    assert verifySignaturesSuccessful;
+    assert verifySignaturesMessageType == BridgeUtilsHarness.TOKEN_TRANSFER();
 }
 
 rule bridgeERC20_integrity {
@@ -165,6 +229,7 @@ rule bridgeERC20_integrity {
     bytes recipient;
     uint8 destChainId;
 
+    numTokenDepositedLogs = 0;
     bool pausedBefore = currentContract.ext_openzeppelin_storage_Pausable._paused;
     uint64 transferNonceBefore = currentContract.nonces[0];
     currentContract.bridgeERC20(e, tokenId, amount, recipient, destChainId);
@@ -176,6 +241,7 @@ rule bridgeERC20_integrity {
     assert BridgeConfig.isTokenSupported(tokenId);
     assert amount > 0;
     assert transferNonceAfter == transferNonceBefore + 1;
+    assert numTokenDepositedLogs == 1, "there should be exactly one TokensDeposited event";
 }
 
 rule bridgeETH_integrity {
@@ -183,6 +249,7 @@ rule bridgeETH_integrity {
     bytes recipient;
     uint8 destChainId;
 
+    numTokenDepositedLogs = 0;
     bool pausedBefore = currentContract.ext_openzeppelin_storage_Pausable._paused;
     uint64 transferNonceBefore = currentContract.nonces[0];
     currentContract.bridgeETH(e, recipient, destChainId);
@@ -193,6 +260,7 @@ rule bridgeETH_integrity {
     assert BridgeConfig.isChainSupported(destChainId);
     assert e.msg.value > 0;
     assert transferNonceAfter == transferNonceBefore + 1;
+    assert numTokenDepositedLogs == 1; 
 }
 
 rule tokenDepositedImpliesTokenVaulted(method f) {
@@ -220,6 +288,49 @@ rule tokenDepositedImpliesTokenVaulted(method f) {
         tokenBalanceAfter > tokenBalanceBefore, "Tokens should be transferred";
 }
 
+
+rule only_transferBridgedTokens_can_remove_tokens(method f) 
+filtered {
+    f -> f.selector != sig:transferBridgedTokensWithSignatures(bytes[],BridgeUtils.Message).selector
+}
+{
+    env e;
+    calldataarg args;
+    address token;
+
+    // prevent overflow in old WETH contract
+    require(e.msg.value < 2^128, "It's impossible to own this much ETH");
+
+    uint256 tokenBalanceBefore = CVL_balanceOf(token, BridgeVault);
+    f(e, args);
+    uint256 tokenBalanceAfter = CVL_balanceOf(token, BridgeVault);
+
+    assert tokenBalanceAfter >= tokenBalanceBefore, "Tokens should stay in the vault";
+}
+
+/**
+ * This rule checks all important conditions for emergency operations.
+ */
+rule executeEmergencyOp_integrity() {
+    env e;
+    bytes[] signatures;
+    BridgeUtils.Message message;
+
+    currentContract.executeEmergencyOpWithSignatures(e, signatures, message);
+
+    bool pausedAfter = currentContract.ext_openzeppelin_storage_Pausable._paused;
+    uint64 nonceBefore = currentContract.nonces[BridgeUtilsHarness.EMERGENCY_OP()];
+    bool isFreezing = BridgeUtilsHarness.decodeEmergencyOpPayloadWrapper@withrevert(message.payload);
+    uint64 nonceAfter = currentContract.nonces[BridgeUtilsHarness.EMERGENCY_OP()];
+    assert !lastReverted;
+    
+    assert pausedAfter == isFreezing;
+    assert nonceBefore == message.nonce;
+    assert nonceAfter > message.nonce;
+    assert verifySignaturesSuccessful;
+    assert verifySignaturesMessageType == BridgeUtilsHarness.EMERGENCY_OP();
+}
+
 rule only_emergency_operation_changes_pause_status(method f)
 filtered {
     f -> f.selector != sig:executeEmergencyOpWithSignatures(bytes[],BridgeUtils.Message).selector
@@ -227,6 +338,8 @@ filtered {
 {
     env e;
     calldataarg args;
+
+    require currentContract.ext_openzeppelin_storage_Initializable._initialized > 0, "Contract is initialized";
 
     bool pausedBefore = currentContract.ext_openzeppelin_storage_Pausable._paused;
     f(e, args);

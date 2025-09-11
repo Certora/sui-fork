@@ -24,8 +24,25 @@ function CVL_decodedBlocklistPayload(bytes payload) returns (bool, address[]) {
     return (blocklisted, members);
 }
 
-function CVL_decodedTokenTransferPayload(bytes payload) returns BridgeUtils.TokenTransferPayload {
+ghost CVL_decodeTokenTransferReverts(bytes) returns bool;
+//ghost CVL_decodeTokenTransferSenderAddress(bytes) returns bytes;
+ghost CVL_decodeTokenTransferTargetChain(bytes) returns uint8;
+ghost CVL_decodeTokenTransferRecipientAddress(bytes) returns address;
+ghost CVL_decodeTokenTransferTokenID(bytes) returns uint8;
+ghost CVL_decodeTokenTransferAmount(bytes) returns uint64;
+function CVL_decodedTokenTransferPayload(bytes payload) returns BridgeUtils.TokenTransferPayload
+{
     BridgeUtils.TokenTransferPayload res;
+    if (CVL_decodeTokenTransferReverts(payload)) {
+        revert();
+    }
+    require res.senderAddressLength == 32, "see code";
+    //require res.senderAddress == CVL_decodeTokenTransferSenderAddress(payload);
+    require res.targetChain == CVL_decodeTokenTransferTargetChain(payload), "make ghost";
+    require res.recipientAddressLength == 20, "see code";
+    require res.recipientAddress == CVL_decodeTokenTransferRecipientAddress(payload), "make ghost";
+    require res.tokenID == CVL_decodeTokenTransferTokenID(payload), "make ghost";
+    require res.amount == CVL_decodeTokenTransferAmount(payload), "make ghost";
     return res;
 }
 
