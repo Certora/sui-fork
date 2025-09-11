@@ -181,13 +181,12 @@ rule transferBridgedTokens_integrity() {
         BridgeUtilsHarness.decodeTokenTransferPayloadWrapper@withrevert(message.payload);
     assert !lastReverted;
     
-    require token == BridgeConfig.tokenAddressOf(tokenTransferPayload.tokenID),
-        "assume we picked right token in the beginning";
     uint256 amount = BridgeUtilsHarness.convertSuiToERC20DecimalWrapper(
         CVL_decimals(token), BridgeConfig.tokenSuiDecimalOf(tokenTransferPayload.tokenID), 
         tokenTransferPayload.amount);
     // check that token balances change correctly
     if (tokenTransferPayload.tokenID == BridgeUtilsHarness.ETH()) {
+        require token == WETH, "This will always transfer WETH, regardless of BridgeConfig";
         if (tokenTransferPayload.recipientAddress == BridgeVault ||
             tokenTransferPayload.recipientAddress == WETH) {
             // Sending ETH to the vault or to the WETH contract will deposit them as WETH again.
@@ -209,6 +208,8 @@ rule transferBridgedTokens_integrity() {
             }        
         }
     } else {
+        require token == BridgeConfig.tokenAddressOf(tokenTransferPayload.tokenID),
+            "assume we picked right token in the beginning";
         assert nativeBalanceBefore == nativeBalanceAfter;
         if (BridgeVault == tokenTransferPayload.recipientAddress) {
             assert balanceBefore == balanceAfter;
