@@ -160,14 +160,14 @@ public fun transfer_records_are_valid(bridge: &mut Bridge,
         // let sigs: &vector<vector<u8>> = record.verified_signatures().borrow();
         // bridge.test_load_inner().inner_committee().verify_signatures(*record.message(), *sigs)
         true
-      }else{
+      } else {
         false
       };
       
 
       // Must be verified exactly if self is inner chain id is not the source
       // (in lack of <=> operator)
-      cvlm_assert((!self_is_source || is_verified) && (!is_verified || self_is_source))
+      cvlm_assert(!self_is_source == is_verified)
     }
 }
 
