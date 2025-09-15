@@ -108,6 +108,8 @@ pub enum FakeID {
     Enumerated(u64, u64),
 }
 
+pub static ENABLE_PTB_V2: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
 const DEFAULT_GAS_PRICE: u64 = 1_000;
 
 const WELL_KNOWN_OBJECTS: &[ObjectID] = &[
@@ -349,7 +351,7 @@ impl MoveTestAdapter<'_> for SuiTestAdapter {
         let AdapterInitConfig {
             additional_mapping,
             account_names,
-            protocol_config,
+            mut protocol_config,
             is_simulator,
             custom_validator_account,
             reference_gas_price,
@@ -360,6 +362,8 @@ impl MoveTestAdapter<'_> for SuiTestAdapter {
             Some((init_cmd, sui_args)) => AdapterInitConfig::from_args(init_cmd, sui_args),
             None => AdapterInitConfig::default(),
         };
+        protocol_config
+            .set_enable_ptb_execution_v2_for_testing(ENABLE_PTB_V2.get().copied().unwrap_or(false));
 
         let (
             executor,
@@ -458,6 +462,7 @@ impl MoveTestAdapter<'_> for SuiTestAdapter {
             upgradeable,
             dependencies,
             gas_price,
+            dry_run,
         } = extra;
         let named_addr_opt = modules.first().unwrap().named_address;
         let first_module_name = modules.first().unwrap().module.self_id().name().to_string();
@@ -487,6 +492,35 @@ impl MoveTestAdapter<'_> for SuiTestAdapter {
         // we are assuming that all packages depend on Move Stdlib and Sui Framework, so these
         // don't have to be provided explicitly as parameters
         dependencies.extend([MOVE_STDLIB_PACKAGE_ID, SUI_FRAMEWORK_PACKAGE_ID]);
+
+        if dry_run {
+            let sender_acc = self.get_sender(sender.clone());
+            let sender_address = sender_acc.address;
+
+            let mut builder = ProgrammableTransactionBuilder::new();
+            if upgradeable {
+                let cap = builder.publish_upgradeable(modules_bytes, dependencies);
+                builder.transfer_arg(sender_address, cap);
+            } else {
+                builder.publish_immutable(modules_bytes, dependencies);
+            };
+            let pt = builder.finish();
+            let payments = self.get_payments(sender_acc, vec![]);
+
+            let transaction = TransactionData::new_programmable(
+                sender_acc.address,
+                payments.clone(),
+                pt,
+                gas_budget,
+                gas_price,
+            );
+            let summary = self.dry_run(transaction).await?;
+            let output = self.object_summary_output(&summary, /* summarize */ false);
+
+            // do not pass back any modules for storage
+            return Ok((output, vec![]));
+        }
+
         let data = |sender, gas| {
             let mut builder = ProgrammableTransactionBuilder::new();
             if upgradeable {
@@ -1053,7 +1087,10 @@ impl MoveTestAdapter<'_> for SuiTestAdapter {
                         .insert(package, before_upgrade);
                 }
                 let (warnings_opt, output, data, modules) = result?;
-                store_modules(self, syntax, data, modules);
+                // skip storing modules if this is a dry run
+                if !dry_run {
+                    store_modules(self, syntax, data, modules);
+                }
                 Ok(merge_output(warnings_opt, output))
             }
             SuiSubcommand::StagePackage(StagePackageCommand {
@@ -1474,7 +1511,7 @@ impl SuiTestAdapter {
 
         let pt = builder.finish();
 
-        let summary = if dry_run {
+        if dry_run {
             let transaction = TransactionData::new_programmable(
                 self.get_sender(Some(sender)).address,
                 vec![],
@@ -1482,14 +1519,15 @@ impl SuiTestAdapter {
                 gas_budget,
                 gas_price,
             );
-            self.dry_run(transaction).await?
-        } else {
-            let data = |sender, gas| {
-                TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price)
-            };
-            let transaction = self.sign_txn(Some(sender), data);
-            self.execute_txn(transaction).await?
-        };
+            let summary = self.dry_run(transaction).await?;
+            return Ok(self.object_summary_output(&summary, false));
+        }
+
+        let data =
+            |sender, gas| TransactionData::new_programmable(sender, gas, pt, gas_budget, gas_price);
+        let transaction = self.sign_txn(Some(sender), data);
+        let summary = self.execute_txn(transaction).await?;
+
         let created_package = summary
             .created
             .iter()
@@ -2127,7 +2165,7 @@ impl Default for AdapterInitConfig {
 }
 
 static NAMED_ADDRESSES: Lazy<BTreeMap<String, NumericalAddress>> = Lazy::new(|| {
-    let mut map = move_stdlib::move_stdlib_named_addresses();
+    let mut map = move_stdlib::named_addresses();
     assert!(map.get("std").unwrap().into_inner() == MOVE_STDLIB_ADDRESS);
     // TODO fix Sui framework constants
     map.insert(

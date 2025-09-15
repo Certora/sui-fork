@@ -4,6 +4,7 @@
 
 use crate::checkpoints::CheckpointServiceNoop;
 use crate::consensus_handler::SequencedConsensusTransaction;
+use crate::execution_scheduler::ExecutionSchedulerAPI;
 use core::default::Default;
 use fastcrypto::hash::MultisetHash;
 use fastcrypto::traits::KeyPair;
@@ -418,9 +419,11 @@ pub async fn send_consensus(authority: &AuthorityState, cert: &VerifiedCertifica
         .await
         .unwrap();
 
-    authority
-        .transaction_manager()
-        .enqueue(certs, &authority.epoch_store_for_testing());
+    authority.execution_scheduler().enqueue(
+        certs,
+        &authority.epoch_store_for_testing(),
+        SchedulingSource::NonFastPath,
+    );
 }
 
 pub async fn send_consensus_no_execution(authority: &AuthorityState, cert: &VerifiedCertificate) {

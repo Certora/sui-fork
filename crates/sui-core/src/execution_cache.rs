@@ -9,6 +9,8 @@ use crate::authority::epoch_start_configuration::EpochStartConfiguration;
 use crate::authority::AuthorityStore;
 use crate::global_state_hasher::GlobalStateHashStore;
 use crate::transaction_outputs::TransactionOutputs;
+use either::Either;
+use itertools::Itertools;
 use mysten_common::fatal;
 use sui_types::bridge::Bridge;
 
@@ -19,7 +21,7 @@ use std::path::Path;
 use std::sync::Arc;
 use sui_config::ExecutionCacheConfig;
 use sui_protocol_config::ProtocolVersion;
-use sui_types::base_types::{FullObjectID, VerifiedExecutionData};
+use sui_types::base_types::{FullObjectID, VerifiedExecutionData, VersionNumber};
 use sui_types::digests::{TransactionDigest, TransactionEffectsDigest};
 use sui_types::effects::{TransactionEffects, TransactionEvents};
 use sui_types::error::{SuiError, SuiResult, UserInputError};
@@ -27,8 +29,8 @@ use sui_types::executable_transaction::VerifiedExecutableTransaction;
 use sui_types::messages_checkpoint::CheckpointSequenceNumber;
 use sui_types::object::Object;
 use sui_types::storage::{
-    BackingPackageStore, BackingStore, ChildObjectResolver, FullObjectKey, MarkerValue, ObjectKey,
-    ObjectOrTombstone, ObjectStore, PackageObject, ParentSync,
+    BackingPackageStore, BackingStore, ChildObjectResolver, ConfigStore, FullObjectKey,
+    MarkerValue, ObjectKey, ObjectOrTombstone, ObjectStore, PackageObject, ParentSync,
 };
 use sui_types::sui_system_state::SuiSystemState;
 use sui_types::transaction::{VerifiedSignedTransaction, VerifiedTransaction};
@@ -180,6 +182,12 @@ pub trait ObjectCacheRead: Send + Sync {
         ret
     }
 
+    fn get_current_epoch_stable_sequence_number(
+        &self,
+        object_id: &ObjectID,
+        epoch_id: EpochId,
+    ) -> Option<VersionNumber>;
+
     fn get_latest_object_ref_or_tombstone(&self, object_id: ObjectID) -> Option<ObjectRef>;
 
     fn get_latest_object_or_tombstone(
@@ -235,40 +243,47 @@ pub trait ObjectCacheRead: Send + Sync {
         Ok(result)
     }
 
-    /// Used by transaction manager to determine if input objects are ready. Distinct from multi_get_object_by_key
+    /// Used by execution scheduler to determine if input objects are ready. Distinct from multi_get_object_by_key
     /// because it also consults markers to handle the case where an object will never become available (e.g.
     /// because it has been received by some other transaction already).
     fn multi_input_objects_available(
         &self,
         keys: &[InputKey],
-        receiving_objects: HashSet<InputKey>,
-        epoch: EpochId,
+        receiving_objects: &HashSet<InputKey>,
+        epoch: &EpochId,
     ) -> Vec<bool> {
-        let (keys_with_version, keys_without_version): (Vec<_>, Vec<_>) = keys
-            .iter()
-            .enumerate()
-            .partition(|(_, key)| key.version().is_some());
+        let mut results = vec![false; keys.len()];
+        let non_canceled_keys = keys.iter().enumerate().filter(|(idx, key)| {
+            if key.is_cancelled() {
+                // Shared objects in canceled transactions are always available.
+                results[*idx] = true;
+                false
+            } else {
+                true
+            }
+        });
+        let (move_object_keys, package_object_keys): (Vec<_>, Vec<_>) = non_canceled_keys
+            .partition_map(|(idx, key)| match key {
+                InputKey::VersionedObject { id, version } => Either::Left((idx, (id, version))),
+                InputKey::Package { id } => Either::Right((idx, id)),
+            });
 
-        let mut versioned_results = vec![];
-        for ((idx, input_key), has_key) in keys_with_version.iter().zip(
+        for ((idx, (id, version)), has_key) in move_object_keys.iter().zip(
             self.multi_object_exists_by_key(
-                &keys_with_version
+                &move_object_keys
                     .iter()
-                    .map(|(_, k)| ObjectKey(k.id().id(), k.version().unwrap()))
+                    .map(|(_, k)| ObjectKey(k.0.id(), *k.1))
                     .collect::<Vec<_>>(),
             )
             .into_iter(),
         ) {
-            assert!(
-                input_key.version().is_none() || input_key.version().unwrap().is_valid(),
-                "Shared objects in cancelled transaction should always be available immediately,
-                 but it appears that transaction manager is waiting for {:?} to become available",
-                input_key
-            );
             // If the key exists at the specified version, then the object is available.
             if has_key {
-                versioned_results.push((*idx, true))
-            } else if receiving_objects.contains(input_key) {
+                results[*idx] = true;
+            } else if receiving_objects.contains(&InputKey::VersionedObject {
+                id: **id,
+                version: **version,
+            }) {
                 // There could be a more recent version of this object, and the object at the
                 // specified version could have already been pruned. In such a case `has_key` will
                 // be false, but since this is a receiving object we should mark it as available if
@@ -276,47 +291,31 @@ pub trait ObjectCacheRead: Send + Sync {
                 // specified version exists or was deleted. We will then let mark it as available
                 // to let the transaction through so it can fail at execution.
                 let is_available = self
-                    .get_object(&input_key.id().id())
-                    .map(|obj| obj.version() >= input_key.version().unwrap())
+                    .get_object(&id.id())
+                    .map(|obj| obj.version() >= **version)
                     .unwrap_or(false)
-                    || self.fastpath_stream_ended_at_version_or_after(
-                        input_key.id().id(),
-                        input_key.version().unwrap(),
-                        epoch,
-                    );
-                versioned_results.push((*idx, is_available));
-            } else if self
-                .get_consensus_stream_end_tx_digest(
-                    FullObjectKey::new(input_key.id(), input_key.version().unwrap()),
-                    epoch,
-                )
-                .is_some()
-            {
+                    || self.fastpath_stream_ended_at_version_or_after(id.id(), **version, *epoch);
+                results[*idx] = is_available;
+            } else {
                 // If the object is an already-removed consensus object, mark it as available if the
                 // version for that object is in the marker table.
-                versioned_results.push((*idx, true));
-            } else {
-                versioned_results.push((*idx, false));
+                let is_consensus_stream_ended = self
+                    .get_consensus_stream_end_tx_digest(FullObjectKey::new(**id, **version), *epoch)
+                    .is_some();
+                results[*idx] = is_consensus_stream_ended;
             }
         }
 
-        let unversioned_results = keys_without_version.into_iter().map(|(idx, key)| {
-            (
-                idx,
-                match self.get_latest_object_ref_or_tombstone(key.id().id()) {
-                    None => false,
-                    Some(entry) => entry.2.is_alive(),
-                },
-            )
+        package_object_keys.into_iter().for_each(|(idx, id)| {
+            // unwrap is safe since this only errors when the object is not a package,
+            // which is impossible if we have a certificate for execution.
+            results[idx] = self.get_package_object(id).unwrap().is_some();
         });
 
-        let mut results = versioned_results
-            .into_iter()
-            .chain(unversioned_results)
-            .collect::<Vec<_>>();
-        results.sort_by_key(|(idx, _)| *idx);
-        results.into_iter().map(|(_, result)| result).collect()
+        results
     }
+
+    fn multi_input_objects_available_cache_only(&self, keys: &[InputKey]) -> Vec<bool>;
 
     /// Return the object with version less then or eq to the provided seq number.
     /// This is used by indexer to find the correct version of dynamic field child object.
@@ -380,6 +379,20 @@ pub trait ObjectCacheRead: Send + Sync {
         }
     }
 
+    /// If the config object was updated, return the first sequence number it was modified at in the
+    /// given epoch.
+    fn get_config_object_change_sequence_number(
+        &self,
+        object_id: &ObjectID,
+        epoch_id: EpochId,
+    ) -> Option<SequenceNumber> {
+        let full_key = FullObjectKey::config_key_for_id(object_id);
+        match self.get_marker_value(full_key, epoch_id) {
+            Some(MarkerValue::ConfigUpdate(version)) => Some(version),
+            _ => None,
+        }
+    }
+
     fn have_received_object_at_version(
         &self,
         object_key: FullObjectKey,
@@ -419,7 +432,7 @@ pub trait ObjectCacheRead: Send + Sync {
         input_and_receiving_keys: &'a [InputKey],
         receiving_keys: &'a HashSet<InputKey>,
         epoch: &'a EpochId,
-    ) -> BoxFuture<'a, Vec<()>>;
+    ) -> BoxFuture<'a, ()>;
 }
 
 pub trait TransactionCacheRead: Send + Sync {
@@ -549,6 +562,18 @@ pub trait TransactionCacheRead: Send + Sync {
         }
         .boxed()
     }
+
+    /// Whether the given transaction was executed from mysticeti fastpath, but have not
+    /// yet been finalized. The outputs are still in the temporary buffer and have not
+    /// been flushed to the cache.
+    fn is_tx_fastpath_executed(&self, tx_digest: &TransactionDigest) -> bool;
+
+    /// Wait until the outputs of the given transactions are available
+    /// in the temporary buffer holding mysticeti fastpath outputs.
+    fn notify_read_fastpath_transaction_outputs<'a>(
+        &'a self,
+        tx_digests: &'a [TransactionDigest],
+    ) -> BoxFuture<'a, Vec<Arc<TransactionOutputs>>>;
 }
 
 pub trait ExecutionCacheWrite: Send + Sync {
@@ -571,6 +596,17 @@ pub trait ExecutionCacheWrite: Send + Sync {
     /// in question.
     fn write_transaction_outputs(&self, epoch_id: EpochId, tx_outputs: Arc<TransactionOutputs>);
 
+    /// Write the output of a Mysticeti fastpath certified transaction.
+    /// Such output cannot be written to the dirty cache right away because
+    /// the transaction may end up rejected by consensus later. We need to make sure
+    /// that it is not visible to any subsequent transaction until we observe it
+    /// from consensus or checkpoints.
+    fn write_fastpath_transaction_outputs(&self, tx_outputs: Arc<TransactionOutputs>);
+
+    /// Flush the output of a Mysticeti fastpath certified transaction to dirty cache.
+    /// This is used to make the output visible to subsequent transactions.
+    fn flush_fastpath_transaction_outputs(&self, tx_digest: TransactionDigest, epoch_id: EpochId);
+
     /// Attempt to acquire object locks for all of the owned input locks.
     fn acquire_transaction_locks(
         &self,
@@ -579,6 +615,12 @@ pub trait ExecutionCacheWrite: Send + Sync {
         tx_digest: TransactionDigest,
         signed_transaction: Option<VerifiedSignedTransaction>,
     ) -> SuiResult;
+
+    /// Write an object entry directly to the cache for testing.
+    /// This allows us to write an object without constructing the entire
+    /// transaction outputs.
+    #[cfg(test)]
+    fn write_object_entry_for_test(&self, object: Object);
 }
 
 pub trait CheckpointCache: Send + Sync {
@@ -672,6 +714,16 @@ macro_rules! implement_storage_traits {
                 version: sui_types::base_types::VersionNumber,
             ) -> Option<Object> {
                 ObjectCacheRead::get_object_by_key(self, object_id, version)
+            }
+        }
+
+        impl ConfigStore for $implementor {
+            fn get_current_epoch_stable_sequence_number(
+                &self,
+                object_id: &ObjectID,
+                epoch_id: EpochId,
+            ) -> Option<VersionNumber> {
+                ObjectCacheRead::get_current_epoch_stable_sequence_number(self, object_id, epoch_id)
             }
         }
 

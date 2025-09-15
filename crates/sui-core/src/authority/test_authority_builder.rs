@@ -15,6 +15,7 @@ use crate::epoch::committee_store::CommitteeStore;
 use crate::epoch::epoch_metrics::EpochMetrics;
 use crate::epoch::randomness::RandomnessManager;
 use crate::execution_cache::build_execution_cache;
+use crate::execution_scheduler::SchedulingSource;
 use crate::jsonrpc_index::IndexStore;
 use crate::mock_consensus::{ConsensusMode, MockConsensusClient};
 use crate::module_cache_metrics::ResolverMetrics;
@@ -347,6 +348,8 @@ impl<'a> TestAuthorityBuilder<'a> {
         config.authority_store_pruning_config = pruning_config;
 
         let chain_identifier = ChainIdentifier::from(*genesis.checkpoint().digest());
+        let policy_config = config.policy_config.clone();
+        let firewall_config = config.firewall_config.clone();
 
         let state = AuthorityState::new(
             name,
@@ -366,6 +369,8 @@ impl<'a> TestAuthorityBuilder<'a> {
             None,
             chain_identifier,
             pruner_db,
+            policy_config,
+            firewall_config,
         )
         .await;
 
@@ -405,6 +410,7 @@ impl<'a> TestAuthorityBuilder<'a> {
                 ),
                 None,
                 &state.epoch_store_for_testing(),
+                SchedulingSource::NonFastPath,
             )
             .await
             .unwrap();

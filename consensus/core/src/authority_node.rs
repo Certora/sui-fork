@@ -271,7 +271,10 @@ where
             dag_state.clone(),
             commit_consumer.block_sender.clone(),
         );
-        transaction_certifier.recover(block_verifier.as_ref());
+        transaction_certifier.recover(
+            block_verifier.as_ref(),
+            commit_consumer.last_processed_commit_index,
+        );
 
         let mut proposed_block_handler = ProposedBlockHandler::new(
             context.clone(),
@@ -292,8 +295,7 @@ where
                 .is_zero();
         info!("Sync last known own block: {sync_last_known_own_block}");
 
-        let block_manager =
-            BlockManager::new(context.clone(), dag_state.clone(), block_verifier.clone());
+        let block_manager = BlockManager::new(context.clone(), dag_state.clone());
 
         let leader_schedule = Arc::new(LeaderSchedule::from_store(
             context.clone(),
@@ -307,6 +309,7 @@ where
             context.clone(),
             commit_consumer,
             dag_state.clone(),
+            transaction_certifier.clone(),
             leader_schedule.clone(),
         );
 
@@ -558,7 +561,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_authority_committee(
         #[values(ConsensusNetwork::Anemo, ConsensusNetwork::Tonic)] network_type: ConsensusNetwork,
-        #[values(0, 5, 10)] gc_depth: u32,
+        #[values(5, 10)] gc_depth: u32,
     ) {
         telemetry_subscribers::init_for_testing();
         let db_registry = Registry::new();
@@ -568,12 +571,6 @@ mod tests {
         let (committee, keypairs) = local_committee_and_keys(0, [1; NUM_OF_AUTHORITIES].to_vec());
         let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
         protocol_config.set_consensus_gc_depth_for_testing(gc_depth);
-
-        if gc_depth == 0 {
-            protocol_config.set_consensus_linearize_subdag_v2_for_testing(false);
-            protocol_config.set_consensus_median_based_commit_timestamp_for_testing(false);
-            protocol_config.set_mysticeti_fastpath_for_testing(false);
-        }
 
         let temp_dirs = (0..NUM_OF_AUTHORITIES)
             .map(|_| TempDir::new().unwrap())
@@ -767,7 +764,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test(flavor = "current_thread")]
-    async fn test_amnesia_recovery_success(#[values(0, 5, 10)] gc_depth: u32) {
+    async fn test_amnesia_recovery_success(#[values(5, 10)] gc_depth: u32) {
         telemetry_subscribers::init_for_testing();
         let db_registry = Registry::new();
         DBMetrics::init(RegistryService::new(db_registry));
@@ -782,12 +779,6 @@ mod tests {
 
         let mut protocol_config = ProtocolConfig::get_for_max_version_UNSAFE();
         protocol_config.set_consensus_gc_depth_for_testing(gc_depth);
-
-        if gc_depth == 0 {
-            protocol_config.set_consensus_linearize_subdag_v2_for_testing(false);
-            protocol_config.set_consensus_median_based_commit_timestamp_for_testing(false);
-            protocol_config.set_mysticeti_fastpath_for_testing(false);
-        }
 
         for (index, _authority_info) in committee.authorities() {
             let dir = TempDir::new().unwrap();

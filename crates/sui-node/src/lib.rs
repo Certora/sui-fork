@@ -36,9 +36,9 @@ use sui_core::consensus_adapter::ConsensusClient;
 use sui_core::consensus_manager::UpdatableConsensusClient;
 use sui_core::epoch::randomness::RandomnessManager;
 use sui_core::execution_cache::build_execution_cache;
+use sui_core::execution_scheduler::SchedulingSource;
 use sui_core::global_state_hasher::GlobalStateHashMetrics;
 use sui_core::storage::RestReadStore;
-use sui_core::traffic_controller::metrics::TrafficControllerMetrics;
 use sui_json_rpc::bridge_api::BridgeReadApi;
 use sui_json_rpc_api::JsonRpcMetrics;
 use sui_network::randomness;
@@ -422,7 +422,7 @@ impl SuiNode {
                                     info!("Submitting JWK to consensus: {:?}", id);
 
                                     let txn = ConsensusTransaction::new_jwk_fetched(authority, id, jwk);
-                                    consensus_adapter.submit(txn, None, &epoch_store)
+                                    consensus_adapter.submit(txn, None, &epoch_store, None)
                                         .tap_err(|e| warn!("Error when submitting JWKs to consensus {:?}", e))
                                         .ok();
                                 }
@@ -739,6 +739,8 @@ impl SuiNode {
             validator_tx_finalizer,
             chain_identifier,
             pruner_db,
+            config.policy_config.clone(),
+            config.firewall_config.clone(),
         )
         .await;
         // ensure genesis txn was executed
@@ -753,7 +755,12 @@ impl SuiNode {
                     ),
                 );
             state
-                .try_execute_immediately(&transaction, None, &epoch_store)
+                .try_execute_immediately(
+                    &transaction,
+                    None,
+                    &epoch_store,
+                    SchedulingSource::NonFastPath,
+                )
                 .instrument(span)
                 .await
                 .unwrap();
@@ -1387,11 +1394,11 @@ impl SuiNode {
                     state.clone(),
                     consensus_adapter.clone(),
                     checkpoint_service.clone(),
-                    state.transaction_manager().clone(),
                     sui_tx_validator_metrics.clone(),
                 ),
             )
             .await;
+        let consensus_replay_waiter = consensus_manager.replay_waiter();
 
         if !epoch_store
             .epoch_start_config()
@@ -1403,7 +1410,7 @@ impl SuiNode {
         }
 
         info!("Spawning checkpoint service");
-        let checkpoint_service_tasks = checkpoint_service.spawn().await;
+        let checkpoint_service_tasks = checkpoint_service.spawn(consensus_replay_waiter).await;
 
         if epoch_store.authenticator_state_enabled() {
             Self::start_jwk_updater(
@@ -1512,9 +1519,7 @@ impl SuiNode {
             state.clone(),
             consensus_adapter,
             Arc::new(ValidatorServiceMetrics::new(prometheus_registry)),
-            TrafficControllerMetrics::new(prometheus_registry),
-            config.policy_config.clone(),
-            config.firewall_config.clone(),
+            config.policy_config.clone().map(|p| p.client_id_source),
         );
 
         let mut server_conf = mysten_network::config::Config::new();
@@ -1766,7 +1771,7 @@ impl SuiNode {
                 info!(?transaction, "submitting capabilities to consensus");
                 components
                     .consensus_adapter
-                    .submit(transaction, None, &cur_epoch_store)?;
+                    .submit(transaction, None, &cur_epoch_store, None)?;
             }
 
             let stop_condition = checkpoint_executor.run_epoch(run_with_range).await;
@@ -2215,11 +2220,12 @@ async fn build_http_servers(
     let mut router = axum::Router::new();
 
     let json_rpc_router = {
+        let traffic_controller = state.traffic_controller.clone();
         let mut server = JsonRpcServerBuilder::new(
             env!("CARGO_PKG_VERSION"),
             prometheus_registry,
+            traffic_controller,
             config.policy_config.clone(),
-            config.firewall_config.clone(),
         );
 
         let kv_store = build_kv_store(&state, config, prometheus_registry)?;

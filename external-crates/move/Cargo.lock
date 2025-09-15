@@ -993,6 +993,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_filter"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "186e05a59d4c50738528153b83b0b0194d3a29507dfec16eccd4b342903397d0"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.11.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c863f0904021b108aa8b2f55046443e6b1ebde8fd4a15c399893aae4fa069f"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "env_filter",
+ "log",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1070,9 +1091,9 @@ dependencies = [
 
 [[package]]
 name = "fixedbitset"
-version = "0.2.0"
+version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37ab347416e802de484e4d03c7316c48f1ecb56574dfd4a46a80f173ce1de04d"
+checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "fnv"
@@ -1907,8 +1928,6 @@ name = "move-abstract-interpreter"
 version = "0.1.0"
 dependencies = [
  "itertools 0.10.5",
- "move-binary-format",
- "move-bytecode-verifier-meter",
 ]
 
 [[package]]
@@ -1963,6 +1982,7 @@ dependencies = [
  "enum-compat-util",
  "getrandom 0.2.15",
  "indexmap 2.8.0",
+ "move-abstract-interpreter",
  "move-core-types",
  "move-proc-macros",
  "proptest",
@@ -2120,6 +2140,7 @@ dependencies = [
  "move-vm-runtime",
  "move-vm-test-utils",
  "move-vm-types",
+ "serde",
  "serde_json",
  "serde_yaml",
  "similar",
@@ -2162,6 +2183,7 @@ dependencies = [
  "hex",
  "insta",
  "lsp-types",
+ "move-abstract-interpreter",
  "move-binary-format",
  "move-borrow-graph",
  "move-bytecode-source-map",
@@ -2203,6 +2225,7 @@ dependencies = [
  "enum-compat-util",
  "ethnum",
  "hex",
+ "indexmap 2.8.0",
  "leb128",
  "move-proc-macros",
  "num",
@@ -2235,6 +2258,7 @@ dependencies = [
  "move-abstract-interpreter",
  "move-binary-format",
  "move-bytecode-source-map",
+ "move-bytecode-verifier",
  "move-command-line-common",
  "move-compiler",
  "move-core-types",
@@ -2479,18 +2503,23 @@ dependencies = [
  "move-command-line-common",
  "move-core-types",
  "move-package",
+ "once_cell",
+ "path-clean",
  "petgraph",
  "regex",
  "serde",
  "serde_json",
  "serde_spanned",
+ "sha2",
  "tempfile",
+ "test-log",
  "thiserror",
  "tokio",
  "toml",
  "toml_edit 0.22.24",
  "tracing",
  "tracing-subscriber",
+ "walkdir",
 ]
 
 [[package]]
@@ -2500,6 +2529,16 @@ dependencies = [
  "enum-compat-util",
  "quote",
  "syn 2.0.98",
+]
+
+[[package]]
+name = "move-regex-borrow-graph"
+version = "0.0.1"
+dependencies = [
+ "itertools 0.10.5",
+ "move-binary-format",
+ "move-core-types",
+ "petgraph",
 ]
 
 [[package]]
@@ -2680,6 +2719,7 @@ dependencies = [
  "move-stdlib-natives",
  "move-symbol-pool",
  "move-trace-format",
+ "move-vm-config",
  "move-vm-profiler",
  "move-vm-runtime",
  "move-vm-test-utils",
@@ -3176,6 +3216,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
+name = "path-clean"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17359afc20d7ab31fdb42bb844c8b3bb1dabd7dcf7e68428492da7f16966fcef"
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3183,12 +3229,14 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "petgraph"
-version = "0.5.1"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "467d164a6de56270bd7c4d070df81d07beace25012d5103ced4e9ff08d6afdb7"
+checksum = "7a98c6720655620a521dcc722d0ad66cd8afd5d86e34a89ef691c50b7b24de06"
 dependencies = [
  "fixedbitset",
- "indexmap 1.9.3",
+ "hashbrown 0.15.2",
+ "indexmap 2.8.0",
+ "serde",
 ]
 
 [[package]]
@@ -4145,6 +4193,28 @@ dependencies = [
  "rand 0.8.5",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "test-log"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7f46083d221181166e5b6f6b1e5f1d499f3a76888826e6cb1d057554157cd0f"
+dependencies = [
+ "env_logger",
+ "test-log-macros",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "test-log-macros"
+version = "0.2.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "888d0c3c6db53c0fdab160d2ed5e12ba745383d3e85813f2ea0f2b1475ab553f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.98",
 ]
 
 [[package]]

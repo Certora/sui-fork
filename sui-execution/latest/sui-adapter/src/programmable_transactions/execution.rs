@@ -7,13 +7,21 @@ pub use checked::*;
 mod checked {
     use crate::{
         adapter::substitute_package_id,
+        data_store::legacy::sui_data_store::SuiDataStore,
         execution_mode::ExecutionMode,
         execution_value::{
             CommandKind, ExecutionState, ObjectContents, ObjectValue, RawValueType, Value,
             ensure_serialized_size,
         },
         gas_charger::GasCharger,
-        programmable_transactions::{context::*, data_store::SuiDataStore},
+        programmable_transactions::{
+            context::*,
+            trace_utils::{
+                trace_move_call_end, trace_move_call_start, trace_ptb_summary, trace_split_coins,
+                trace_transfer,
+            },
+        },
+        static_programmable_transactions,
         type_resolver::TypeTagResolver,
     };
     use move_binary_format::file_format::AbilitySet;
@@ -67,7 +75,7 @@ mod checked {
             MovePackage, UpgradeCap, UpgradePolicy, UpgradeReceipt, UpgradeTicket,
             normalize_deserialized_modules,
         },
-        storage::{PackageObject, get_package_objects},
+        storage::{BackingPackageStore, PackageObject, get_package_objects},
         transaction::{Command, ProgrammableMoveCall, ProgrammableTransaction},
         transfer::RESOLVED_RECEIVING_STRUCT,
         type_input::{StructInput, TypeInput},
@@ -83,11 +91,26 @@ mod checked {
         metrics: Arc<LimitsMetrics>,
         vm: &MoveVM,
         state_view: &mut dyn ExecutionState,
+        package_store: &dyn BackingPackageStore,
         tx_context: Rc<RefCell<TxContext>>,
         gas_charger: &mut GasCharger,
         pt: ProgrammableTransaction,
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> ResultWithTimings<Mode::ExecutionResults, ExecutionError> {
+        if protocol_config.enable_ptb_execution_v2() {
+            return static_programmable_transactions::execute::<Mode>(
+                protocol_config,
+                metrics,
+                vm,
+                state_view,
+                package_store,
+                tx_context,
+                gas_charger,
+                pt,
+                trace_builder_opt,
+            );
+        }
+
         let mut timings = vec![];
         let result = execute_inner::<Mode>(
             &mut timings,
@@ -128,6 +151,9 @@ mod checked {
             gas_charger,
             inputs,
         )?;
+
+        trace_ptb_summary(trace_builder_opt, &commands)?;
+
         // execute commands
         let mut mode_results = Mode::empty_results();
         for (idx, command) in commands.into_iter().enumerate() {
@@ -157,11 +183,16 @@ mod checked {
         // for expensive invariant checks
         let wrapped_object_containers = object_runtime.wrapped_object_containers();
 
+        // We record the config objects that we have accessed in this transaction through the
+        // unsequenced read API.
+        let accessed_config_objects = object_runtime.accessed_configs();
+
         // apply changes
         let finished = context.finish::<Mode>();
         // Save loaded objects for debug. We dont want to lose the info
         state_view.save_loaded_runtime_objects(loaded_runtime_objects);
         state_view.save_wrapped_object_containers(wrapped_object_containers);
+        state_view.save_unsequenced_config_accesses(accessed_config_objects);
         state_view.record_execution_results(finished?);
         Ok(mode_results)
     }
@@ -272,6 +303,9 @@ mod checked {
                     .collect::<Result<_, _>>()?;
                 let addr: SuiAddress =
                     context.by_value_arg(CommandKind::TransferObjects, objs.len(), addr_arg)?;
+
+                trace_transfer(context, trace_builder_opt, &objs)?;
+
                 for obj in objs {
                     obj.ensure_public_transfer_eligible()?;
                     context.transfer_object(obj, addr)?;
@@ -290,7 +324,7 @@ mod checked {
                     let msg = "Expected a coin but got an non coin object".to_owned();
                     return Err(ExecutionError::new_with_source(e, msg));
                 };
-                let split_coins = amount_args
+                let split_coins: Vec<Value> = amount_args
                     .into_iter()
                     .map(|amount_arg| {
                         let amount: u64 =
@@ -304,6 +338,9 @@ mod checked {
                         Ok(Value::Object(new_coin))
                     })
                     .collect::<Result<_, ExecutionError>>()?;
+
+                trace_split_coins(context, trace_builder_opt, &obj.type_, coin, &split_coins)?;
+
                 context.restore_arg::<Mode>(&mut argument_updates, coin_arg, Value::Object(obj))?;
                 split_coins
             }
@@ -357,6 +394,8 @@ mod checked {
                     type_arguments,
                     arguments,
                 } = *move_call;
+                trace_move_call_start(trace_builder_opt);
+
                 let arguments = context.splat_args(0, arguments)?;
 
                 let module = to_identifier(context, module)?;
@@ -387,7 +426,9 @@ mod checked {
                     trace_builder_opt,
                 );
 
-                context.linkage_view.reset_linkage();
+                trace_move_call_end(trace_builder_opt);
+
+                context.linkage_view.reset_linkage()?;
                 return_values?
             }
             Command::Publish(modules, dep_ids) => execute_move_publish::<Mode>(
@@ -579,7 +620,7 @@ mod checked {
 
         // For newly published packages, runtime ID matches storage ID.
         let storage_id = runtime_id;
-        let dependencies = fetch_packages(context, &dep_ids)?;
+        let dependencies = fetch_packages(&context.state_view, &dep_ids)?;
         let package =
             context.new_package(&modules, dependencies.iter().map(|p| p.move_package()))?;
 
@@ -593,7 +634,7 @@ mod checked {
         let res = publish_and_verify_modules(context, runtime_id, &modules).and_then(|_| {
             init_modules::<Mode>(context, argument_updates, &modules, trace_builder_opt)
         });
-        context.linkage_view.reset_linkage();
+        context.linkage_view.reset_linkage()?;
         if res.is_err() {
             context.pop_package();
         }
@@ -682,7 +723,7 @@ mod checked {
         }
 
         // Check that this package ID points to a package and get the package we're upgrading.
-        let current_package = fetch_package(context, &upgrade_ticket.package.bytes)?;
+        let current_package = fetch_package(&context.state_view, &upgrade_ticket.package.bytes)?;
 
         let mut modules = deserialize_modules::<Mode>(context, &module_bytes)?;
         let runtime_id = current_package.move_package().original_package_id();
@@ -691,7 +732,7 @@ mod checked {
         // Upgraded packages share their predecessor's runtime ID but get a new storage ID.
         let storage_id = context.tx_context.borrow_mut().fresh_id();
 
-        let dependencies = fetch_packages(context, &dep_ids)?;
+        let dependencies = fetch_packages(&context.state_view, &dep_ids)?;
         let package = context.upgrade_package(
             storage_id,
             current_package.move_package(),
@@ -701,11 +742,11 @@ mod checked {
 
         context.linkage_view.set_linkage(&package)?;
         let res = publish_and_verify_modules(context, runtime_id, &modules);
-        context.linkage_view.reset_linkage();
+        context.linkage_view.reset_linkage()?;
         res?;
 
         check_compatibility(
-            context,
+            context.protocol_config,
             current_package.move_package(),
             &modules,
             upgrade_ticket.policy,
@@ -722,8 +763,8 @@ mod checked {
         )])
     }
 
-    fn check_compatibility(
-        context: &ExecutionContext,
+    pub fn check_compatibility(
+        protocol_config: &ProtocolConfig,
         existing_package: &MovePackage,
         upgrading_modules: &[CompiledModule],
         policy: u8,
@@ -738,7 +779,7 @@ mod checked {
         };
 
         let pool = &mut normalized::RcPool::new();
-        let binary_config = to_binary_config(context.protocol_config);
+        let binary_config = to_binary_config(protocol_config);
         let Ok(current_normalized) =
             existing_package.normalize(pool, &binary_config, /* include code */ true)
         else {
@@ -747,9 +788,7 @@ mod checked {
 
         let existing_modules_len = current_normalized.len();
         let upgrading_modules_len = upgrading_modules.len();
-        let disallow_new_modules = context
-            .protocol_config
-            .disallow_new_modules_in_deps_only_packages()
+        let disallow_new_modules = protocol_config.disallow_new_modules_in_deps_only_packages()
             && policy as u8 == UpgradePolicy::DEP_ONLY;
 
         if disallow_new_modules && existing_modules_len != upgrading_modules_len {
@@ -812,11 +851,11 @@ mod checked {
         })
     }
 
-    fn fetch_package(
-        context: &ExecutionContext<'_, '_, '_>,
+    pub fn fetch_package(
+        state_view: &impl BackingPackageStore,
         package_id: &ObjectID,
     ) -> Result<PackageObject, ExecutionError> {
-        let mut fetched_packages = fetch_packages(context, vec![package_id])?;
+        let mut fetched_packages = fetch_packages(state_view, vec![package_id])?;
         assert_invariant!(
             fetched_packages.len() == 1,
             "Number of fetched packages must match the number of package object IDs if successful."
@@ -829,12 +868,12 @@ mod checked {
         }
     }
 
-    fn fetch_packages<'ctx, 'vm, 'state, 'a>(
-        context: &'ctx ExecutionContext<'vm, 'state, 'a>,
+    pub fn fetch_packages<'ctx, 'state>(
+        state_view: &'state impl BackingPackageStore,
         package_ids: impl IntoIterator<Item = &'ctx ObjectID>,
     ) -> Result<Vec<PackageObject>, ExecutionError> {
         let package_ids: BTreeSet<_> = package_ids.into_iter().collect();
-        match get_package_objects(&context.state_view, package_ids) {
+        match get_package_objects(state_view, package_ids) {
             Err(e) => Err(ExecutionError::new_with_source(
                 ExecutionErrorKind::PublishUpgradeMissingDependency,
                 e,
@@ -1143,7 +1182,7 @@ mod checked {
                 check_non_entry_signature::<Mode>(context, module_id, function, &signature)?
             }
         };
-        check_private_generics(context, module_id, function, type_arguments)?;
+        check_private_generics(module_id, function)?;
         Ok(LoadedFunctionInfo {
             kind: function_kind,
             signature,
@@ -1161,6 +1200,8 @@ mod checked {
         let LoadedFunctionInstantiation {
             parameters,
             return_,
+            instruction_length,
+            definition_index,
         } = signature;
         let parameters = parameters
             .into_iter()
@@ -1175,6 +1216,8 @@ mod checked {
         Ok(LoadedFunctionInstantiation {
             parameters,
             return_,
+            instruction_length,
+            definition_index,
         })
     }
 
@@ -1242,11 +1285,9 @@ mod checked {
             .collect()
     }
 
-    fn check_private_generics(
-        _context: &mut ExecutionContext,
+    pub fn check_private_generics(
         module_id: &ModuleId,
         function: &IdentStr,
-        _type_arguments: &[Type],
     ) -> Result<(), ExecutionError> {
         let module_ident = (module_id.address(), module_id.name());
         if module_ident == (&SUI_FRAMEWORK_ADDRESS, EVENT_MODULE) {

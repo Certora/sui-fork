@@ -65,7 +65,9 @@ impl MessageMerge<&sui_sdk_types::TransactionEffects> for TransactionEffects {
         mask: &crate::field_mask::FieldMaskTree,
     ) {
         if mask.contains(Self::BCS_FIELD.name) {
-            self.bcs = Some(super::Bcs::serialize(&source).unwrap());
+            let mut bcs = super::Bcs::serialize(&source).unwrap();
+            bcs.name = Some("TransactionEffects".to_owned());
+            self.bcs = Some(bcs);
         }
 
         if mask.contains(Self::DIGEST_FIELD.name) {
@@ -697,6 +699,10 @@ impl From<sui_sdk_types::UnchangedSharedObject> for super::UnchangedSharedObject
                 UnchangedSharedObjectKind::Canceled
             }
             PerEpochConfig => UnchangedSharedObjectKind::PerEpochConfig,
+            PerEpochConfigWithSequenceNumber { version } => {
+                message.version = Some(version);
+                UnchangedSharedObjectKind::PerEpochConfigWithSequenceNumber
+            }
         };
 
         message.set_kind(kind);
@@ -751,6 +757,13 @@ impl TryFrom<&super::UnchangedSharedObject> for sui_sdk_types::UnchangedSharedOb
                     .ok_or_else(|| TryFromProtoError::missing("version"))?,
             },
             UnchangedSharedObjectKind::PerEpochConfig => UnchangedSharedKind::PerEpochConfig,
+            UnchangedSharedObjectKind::PerEpochConfigWithSequenceNumber => {
+                UnchangedSharedKind::PerEpochConfigWithSequenceNumber {
+                    version: value
+                        .version
+                        .ok_or_else(|| TryFromProtoError::missing("version"))?,
+                }
+            }
         };
 
         Ok(Self { object_id, kind })

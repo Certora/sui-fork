@@ -5,16 +5,15 @@
 use anyhow::bail;
 use move_command_line_common::testing::insta_assert;
 
-use codespan_reporting::{
-    files::SimpleFiles,
-    term::{self, Config, termcolor::Buffer},
-};
+use codespan_reporting::term::{self, Config, termcolor::Buffer};
 use move_package_alt::{
     dependency::{self, DependencySet, UnpinnedDependencyInfo},
+    errors::Files,
     flavor::Vanilla,
-    package::{lockfile::Lockfile, manifest::Manifest},
+    package::{RootPackage, lockfile::Lockfile, manifest::Manifest},
 };
 use std::path::Path;
+use tracing::debug;
 use tracing_subscriber::EnvFilter;
 
 /// Resolve the package contained in the same directory as [path], and snapshot a value based
@@ -36,6 +35,7 @@ pub fn run_test(path: &Path) -> datatest_stable::Result<()> {
     let kind = path.extension().unwrap().to_string_lossy();
     let toml_path = path.with_extension("toml");
     let test = Test::from_path_with_kind(&toml_path, &kind)?;
+
     test.run()
 }
 
@@ -73,16 +73,10 @@ impl Test<'_> {
                 let contents = match manifest.as_ref() {
                     Ok(m) => format!("{:#?}", m),
                     Err(_) => {
-                        let mut mapped_files = SimpleFiles::new();
-                        mapped_files.add(
-                            self.toml_path.to_str().unwrap(),
-                            std::fs::read_to_string(self.toml_path).unwrap(),
-                        );
-
                         if let Some(e) = manifest.as_ref().err() {
                             let diagnostic = e.to_diagnostic();
                             let mut writer = Buffer::no_color();
-                            term::emit(&mut writer, &Config::default(), &mapped_files, &diagnostic)
+                            term::emit(&mut writer, &Config::default(), &Files, &diagnostic)
                                 .unwrap();
                             let inner = writer.into_inner();
                             String::from_utf8(inner).unwrap_or_default()
@@ -93,6 +87,7 @@ impl Test<'_> {
                 };
                 contents
             }
+            "graph_to_lockfile" => run_graph_to_lockfile_test_wrapper(self.toml_path).unwrap(),
             "locked" => {
                 let lockfile = Lockfile::<Vanilla>::read_from_dir(self.toml_path.parent().unwrap());
                 match lockfile {
@@ -106,13 +101,28 @@ impl Test<'_> {
     }
 }
 
+async fn run_graph_to_lockfile_test(
+    input_path: &Path,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let root_pkg = RootPackage::<Vanilla>::load(input_path.parent().unwrap(), None).await?;
+    let lockfile = root_pkg.dependencies_to_lockfile().await?;
+    Ok(lockfile.render_as_toml().to_string())
+}
+
+fn run_graph_to_lockfile_test_wrapper(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Runtime::new()?;
+    let data = rt.block_on(run_graph_to_lockfile_test(path))?;
+    Ok(data)
+}
+
 async fn run_pinning_tests(input_path: &Path) -> datatest_stable::Result<String> {
     let manifest = Manifest::<Vanilla>::read_from_file(input_path).unwrap();
 
-    let deps: DependencySet<UnpinnedDependencyInfo<Vanilla>> = manifest.dependencies();
+    let deps: DependencySet<UnpinnedDependencyInfo> = manifest.dependencies();
+    debug!("{deps:?}");
 
     add_bindir();
-    let pinned = dependency::pin(&Vanilla, deps, manifest.environments()).await;
+    let pinned = dependency::pin::<Vanilla>(deps, manifest.environments()).await;
 
     let output = match pinned {
         Ok(ref deps) => format!("{deps:?}"),
@@ -150,6 +160,9 @@ datatest_stable::harness!(
     run_test,
     "tests/data",
     r".*\.parsed$",
+    run_test,
+    "tests/data",
+    r".*\.graph_to_lockfile$",
     run_test,
     "tests/data",
     r".*\.locked$",

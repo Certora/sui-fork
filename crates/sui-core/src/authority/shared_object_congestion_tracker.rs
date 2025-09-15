@@ -13,7 +13,7 @@ use sui_types::error::SuiResult;
 use sui_types::executable_transaction::VerifiedExecutableTransaction;
 use sui_types::messages_consensus::Round;
 use sui_types::transaction::{Argument, SharedInputObject, TransactionDataAPI};
-use tracing::trace;
+use tracing::{debug, trace};
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 struct Params {
@@ -226,14 +226,23 @@ impl SharedObjectCongestionTracker {
             PerObjectCongestionControlMode::TotalGasBudgetWithCap => {
                 Some(std::cmp::min(cert.gas_budget(), self.get_tx_cost_cap(cert)))
             }
-            PerObjectCongestionControlMode::ExecutionTimeEstimate(_) => Some(
-                execution_time_estimator
+            PerObjectCongestionControlMode::ExecutionTimeEstimate(_) => {
+                let estimate_us = execution_time_estimator
                     .expect("`execution_time_estimator` must be set for PerObjectCongestionControlMode::ExecutionTimeEstimate")
                     .get_estimate(cert.transaction_data())
                     .as_micros()
                     .try_into()
-                    .unwrap_or(u64::MAX),
-            ),
+                    .unwrap_or(u64::MAX);
+                if estimate_us >= 15_000 {
+                    let digest = cert.digest();
+                    debug!(
+                        ?digest,
+                        "expensive tx cost estimate detected: {estimate_us}us"
+                    );
+                }
+
+                Some(estimate_us)
+            }
         }
     }
 
@@ -729,6 +738,7 @@ mod object_cost_tests {
                 randomness_scalar: 0,
                 stored_observations_num_included_checkpoints: 10,
                 stored_observations_limit: u64::MAX,
+                stake_weighted_median_threshold: 0,
             }),
         )]
         mode: PerObjectCongestionControlMode,
@@ -859,6 +869,7 @@ mod object_cost_tests {
                 max_estimate_us: u64::MAX,
                 stored_observations_num_included_checkpoints: 10,
                 stored_observations_limit: u64::MAX,
+                stake_weighted_median_threshold: 0,
             }),
         )]
         mode: PerObjectCongestionControlMode,
@@ -1031,6 +1042,7 @@ mod object_cost_tests {
                 max_estimate_us: u64::MAX,
                 stored_observations_num_included_checkpoints: 10,
                 stored_observations_limit: u64::MAX,
+                stake_weighted_median_threshold: 0,
             }),
         )]
         mode: PerObjectCongestionControlMode,
@@ -1225,6 +1237,7 @@ mod object_cost_tests {
                 max_estimate_us: u64::MAX,
                 stored_observations_num_included_checkpoints: 10,
                 stored_observations_limit: u64::MAX,
+                stake_weighted_median_threshold: 0,
             }),
         )]
         mode: PerObjectCongestionControlMode,
@@ -1396,6 +1409,7 @@ mod object_cost_tests {
                 max_estimate_us: u64::MAX,
                 stored_observations_num_included_checkpoints: 10,
                 stored_observations_limit: u64::MAX,
+                stake_weighted_median_threshold: 0,
             }),
         )]
         mode: PerObjectCongestionControlMode,

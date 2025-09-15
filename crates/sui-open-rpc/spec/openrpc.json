@@ -12,7 +12,7 @@
       "name": "Apache-2.0",
       "url": "https://raw.githubusercontent.com/MystenLabs/sui/main/LICENSE"
     },
-    "version": "1.50.0"
+    "version": "1.51.0"
   },
   "methods": [
     {
@@ -1294,7 +1294,7 @@
             "name": "Result",
             "value": {
               "minSupportedProtocolVersion": "1",
-              "maxSupportedProtocolVersion": "85",
+              "maxSupportedProtocolVersion": "86",
               "protocolVersion": "6",
               "featureFlags": {
                 "accept_passkey_in_multisig": false,
@@ -1321,6 +1321,8 @@
                 "disallow_adding_abilities_on_upgrade": false,
                 "disallow_change_struct_type_params_on_upgrade": false,
                 "disallow_new_modules_in_deps_only_packages": false,
+                "disallow_self_identifier": false,
+                "enable_accumulators": false,
                 "enable_coin_deny_list": false,
                 "enable_coin_deny_list_v2": false,
                 "enable_effects_v2": false,
@@ -1331,12 +1333,14 @@
                 "enable_nitro_attestation_upgraded_parsing": false,
                 "enable_party_transfer": false,
                 "enable_poseidon": false,
+                "enable_ptb_execution_v2": false,
                 "enable_vdf": false,
                 "end_of_epoch_transaction_supported": false,
                 "enforce_checkpoint_timestamp_monotonicity": false,
                 "fresh_vm_on_framework_upgrade": false,
                 "hardened_otw_check": false,
                 "include_consensus_digest_in_prologue": false,
+                "include_epoch_stable_sequence_number_in_effects": false,
                 "loaded_child_object_format": false,
                 "loaded_child_object_format_type": false,
                 "loaded_child_objects_fixed": true,
@@ -1376,6 +1380,7 @@
                 "soft_bundle": false,
                 "throughput_aware_consensus_submission": false,
                 "txn_base_cost_as_multiplier": false,
+                "type_tags_in_object_runtime": false,
                 "uncompressed_g1_group_elements": false,
                 "upgraded_multisig_supported": false,
                 "validate_identifier_inputs": false,
@@ -8824,7 +8829,8 @@
               "AuthenticatorStateCreate",
               "RandomnessStateCreate",
               "CoinDenyListStateCreate",
-              "StoreExecutionTimeObservations"
+              "StoreExecutionTimeObservations",
+              "AccumulatorRootCreate"
             ]
           },
           {
@@ -8988,6 +8994,39 @@
             "items": {
               "$ref": "#/components/schemas/SuiMoveAbility"
             }
+          }
+        }
+      },
+      "SuiMoveAbort": {
+        "type": "object",
+        "properties": {
+          "error_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "function": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint16",
+            "minimum": 0.0
+          },
+          "module_id": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -10437,6 +10476,17 @@
               "transactionDigest"
             ],
             "properties": {
+              "abortError": {
+                "description": "The abort error populated if the transaction failed with an abort code.",
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SuiMoveAbort"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "created": {
                 "description": "ObjectRef and owner of new objects created.",
                 "type": "array",
@@ -10893,6 +10943,37 @@
                     "type": "null"
                   }
                 ]
+              }
+            }
+          },
+          {
+            "description": "A series of commands where the results of one command can be used in future commands",
+            "type": "object",
+            "required": [
+              "inputs",
+              "kind",
+              "transactions"
+            ],
+            "properties": {
+              "inputs": {
+                "description": "Input objects or primitive values",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SuiCallArg"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "ProgrammableSystemTransaction"
+                ]
+              },
+              "transactions": {
+                "description": "The transactions to be executed sequentially. A failure in any transaction will result in the failure of the entire programmable transaction block.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SuiTransaction"
+                }
               }
             }
           }

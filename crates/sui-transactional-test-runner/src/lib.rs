@@ -50,9 +50,33 @@ use sui_types::transaction::TransactionKind;
 use sui_types::transaction::{InputObjects, TransactionData};
 use test_adapter::{SuiTestAdapter, PRE_COMPILED};
 
+use crate::test_adapter::ENABLE_PTB_V2;
+
 #[cfg_attr(not(msim), tokio::main)]
 #[cfg_attr(msim, msim::main)]
 pub async fn run_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    ENABLE_PTB_V2.set(false).unwrap();
+    let (_guard, _filter_handle) = telemetry_subscribers::TelemetryConfig::new()
+        .with_env()
+        .init();
+    run_test_impl::<SuiTestAdapter>(path, Some(std::sync::Arc::new(PRE_COMPILED.clone()))).await?;
+    Ok(())
+}
+
+#[cfg_attr(not(msim), tokio::main)]
+#[cfg_attr(msim, msim::main)]
+pub async fn run_ptb_v2_test(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    ENABLE_PTB_V2.set(true).unwrap();
+
+    // check if the test is enabled
+    const ENABLED_DIRECTORIES: &[&str] = &[];
+    let mut components = path.parent().unwrap().components();
+    if !components.any(|c| {
+        let string = c.as_os_str().to_string_lossy().to_string();
+        ENABLED_DIRECTORIES.contains(&string.as_str())
+    }) {
+        return Ok(());
+    }
     let (_guard, _filter_handle) = telemetry_subscribers::TelemetryConfig::new()
         .with_env()
         .init();
@@ -171,10 +195,10 @@ impl TransactionalAdapter for ValidatorWithFullnode {
         );
 
         let epoch_store = self.validator.load_epoch_store_one_call_per_task().clone();
-        let (_, effects, error) =
+        let (transaction_outputs, error) =
             self.validator
                 .prepare_certificate_for_benchmark(&tx, input_objects, &epoch_store)?;
-        Ok((effects, error))
+        Ok((transaction_outputs.effects, error))
     }
 
     async fn dry_run_transaction_block(

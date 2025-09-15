@@ -212,7 +212,8 @@ impl AuthorityPerpetualTables {
     pub fn open(parent_path: &Path, _: Option<AuthorityPerpetualTablesOptions>) -> Self {
         tracing::warn!("AuthorityPerpetualTables using tidehunter");
         use typed_store::tidehunter_util::{
-            default_cells_per_mutex, Bytes, KeySpaceConfig, ThConfig, WalPosition,
+            default_cells_per_mutex, Bytes, KeyIndexing, KeySpaceConfig, KeyType, ThConfig,
+            WalPosition,
         };
         const MUTEXES: usize = 1024;
         const VALUE_CACHE_SIZE: usize = 20_000;
@@ -235,6 +236,7 @@ impl AuthorityPerpetualTables {
         };
         let mut digest_prefix = vec![0; 8];
         digest_prefix[7] = 32;
+        let uniform_key = KeyType::uniform(default_cells_per_mutex());
 
         let configs = vec![
             (
@@ -242,7 +244,7 @@ impl AuthorityPerpetualTables {
                 ThConfig::new_with_config(
                     32 + 8,
                     MUTEXES,
-                    default_cells_per_mutex() * 4,
+                    KeyType::uniform(default_cells_per_mutex() * 4),
                     KeySpaceConfig::new().with_compactor(Box::new(objects_compactor)),
                 ),
             ),
@@ -251,45 +253,37 @@ impl AuthorityPerpetualTables {
                 ThConfig::new_with_config(
                     32 + 8 + 32 + 8,
                     MUTEXES,
-                    default_cells_per_mutex() * 4,
+                    KeyType::uniform(default_cells_per_mutex() * 4),
                     bloom_config.clone(),
                 ),
             ),
             (
                 "transactions".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
+                ThConfig::new_with_rm_prefix_indexing(
+                    KeyIndexing::key_reduction(32, 0..16),
                     MUTEXES,
-                    default_cells_per_mutex(),
-                    KeySpaceConfig::new()
-                        .with_key_reduction(0..16)
-                        .with_value_cache_size(VALUE_CACHE_SIZE),
+                    uniform_key,
+                    KeySpaceConfig::new().with_value_cache_size(VALUE_CACHE_SIZE),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "effects".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
+                ThConfig::new_with_rm_prefix_indexing(
+                    KeyIndexing::key_reduction(32, 0..16),
                     MUTEXES,
-                    default_cells_per_mutex(),
-                    bloom_config
-                        .clone()
-                        .with_key_reduction(0..16)
-                        .with_value_cache_size(VALUE_CACHE_SIZE),
+                    uniform_key,
+                    bloom_config.clone().with_value_cache_size(VALUE_CACHE_SIZE),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "executed_effects".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
+                ThConfig::new_with_rm_prefix_indexing(
+                    KeyIndexing::key_reduction(32, 0..16),
                     MUTEXES,
-                    default_cells_per_mutex(),
-                    bloom_config
-                        .clone()
-                        .with_key_reduction(0..16)
-                        .with_value_cache_size(VALUE_CACHE_SIZE),
+                    uniform_key,
+                    bloom_config.clone().with_value_cache_size(VALUE_CACHE_SIZE),
                     digest_prefix.clone(),
                 ),
             ),
@@ -298,7 +292,7 @@ impl AuthorityPerpetualTables {
                 ThConfig::new_with_rm_prefix(
                     32 + 8,
                     MUTEXES,
-                    default_cells_per_mutex(),
+                    uniform_key,
                     KeySpaceConfig::default(),
                     digest_prefix.clone(),
                 ),
@@ -308,7 +302,7 @@ impl AuthorityPerpetualTables {
                 ThConfig::new_with_rm_prefix(
                     32,
                     MUTEXES,
-                    default_cells_per_mutex(),
+                    uniform_key,
                     KeySpaceConfig::default(),
                     digest_prefix.clone(),
                 ),
@@ -318,34 +312,37 @@ impl AuthorityPerpetualTables {
                 ThConfig::new_with_rm_prefix(
                     32,
                     MUTEXES,
-                    default_cells_per_mutex(),
+                    uniform_key,
                     KeySpaceConfig::default(),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "root_state_hash_by_epoch".to_string(),
-                ThConfig::new(8, 1, 1),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "epoch_start_configuration".to_string(),
-                ThConfig::new(0, 1, 1),
+                ThConfig::new(0, 1, KeyType::uniform(1)),
             ),
-            ("pruned_checkpoint".to_string(), ThConfig::new(0, 1, 1)),
+            (
+                "pruned_checkpoint".to_string(),
+                ThConfig::new(0, 1, KeyType::uniform(1)),
+            ),
             (
                 "expected_network_sui_amount".to_string(),
-                ThConfig::new(0, 1, 1),
+                ThConfig::new(0, 1, KeyType::uniform(1)),
             ),
             (
                 "expected_storage_fund_imbalance".to_string(),
-                ThConfig::new(0, 1, 1),
+                ThConfig::new(0, 1, KeyType::uniform(1)),
             ),
             (
                 "object_per_epoch_marker_table".to_string(),
                 ThConfig::new_with_config(
                     32 + 8 + 8,
                     MUTEXES,
-                    default_cells_per_mutex(),
+                    uniform_key,
                     KeySpaceConfig::new_with_key_offset(8),
                 ),
             ),
@@ -354,7 +351,7 @@ impl AuthorityPerpetualTables {
                 ThConfig::new_with_config(
                     32 + 8 + 8,
                     MUTEXES,
-                    default_cells_per_mutex(),
+                    uniform_key,
                     KeySpaceConfig::new_with_key_offset(8),
                 ),
             ),
@@ -520,6 +517,43 @@ impl AuthorityPerpetualTables {
         &self,
     ) -> Result<Option<CheckpointSequenceNumber>, TypedStoreError> {
         self.pruned_checkpoint.get(&())
+    }
+
+    pub fn get_current_epoch_stable_sequence_number(
+        &self,
+        object_id: &ObjectID,
+        epoch_id: EpochId,
+    ) -> Option<VersionNumber> {
+        let object_key = (epoch_id, FullObjectKey::config_key_for_id(object_id));
+        // Read the object first then read the marker. This is to guard against data races between
+        // the data store and marker table where the object could be mutated after we read the
+        // marker table but before we read the object.
+        //
+        // In particular, since we read the object first then the marker table either:
+        // 1. The object was mutated this epoch before the object read (and marker table read), in
+        //    which case the marker table will have an entry in it and we use the pre-mutation
+        //    version from the marker table.
+        // 2. There was no mutation of the object this epoch either before the object read
+        //    or the marker table read. In which case we will use the object's version -- the
+        //    "pre-mutation" version for it during the epoch.
+        // 3. There is a mutation that occurs between the object read and the marker table read. In
+        //    this case we will use the marker table version, which holds the pre-mutation version.
+        // In either case this gives us the correct "pre-mutation" version for the object
+        // for the epoch.
+        let object = self.get_object(object_id);
+        match self
+            .object_per_epoch_marker_table_v2
+            .get(&object_key)
+            .expect("marker table error")
+        {
+            Some(MarkerValue::ConfigUpdate(seqno)) => Some(seqno),
+            Some(
+                MarkerValue::FastpathStreamEnded
+                | MarkerValue::ConsensusStreamEnded(_)
+                | MarkerValue::Received,
+            )
+            | None => object.map(|o| o.version()),
+        }
     }
 
     pub fn set_highest_pruned_checkpoint(

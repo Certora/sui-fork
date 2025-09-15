@@ -59,7 +59,7 @@ use sui_types::messages_checkpoint::{
 };
 use sui_types::messages_consensus::{
     check_total_jwk_size, AuthorityCapabilitiesV1, AuthorityCapabilitiesV2, AuthorityIndex,
-    ConsensusTransaction, ConsensusTransactionKey, ConsensusTransactionKind,
+    ConsensusPosition, ConsensusTransaction, ConsensusTransactionKey, ConsensusTransactionKind,
     ExecutionTimeObservation, TimestampMs, VersionedDkgConfirmation,
 };
 use sui_types::signature::GenericSignature;
@@ -87,7 +87,7 @@ use typed_store::Map;
 use super::authority_store_tables::ENV_VAR_LOCKS_BLOCK_CACHE_SIZE;
 use super::consensus_tx_status_cache::{ConsensusTxStatus, ConsensusTxStatusCache};
 use super::epoch_start_configuration::EpochStartConfigTrait;
-use super::execution_time_estimator::ExecutionTimeEstimator;
+use super::execution_time_estimator::{ConsensusObservations, ExecutionTimeEstimator};
 use super::shared_object_congestion_tracker::{
     CongestionPerObjectDebt, SharedObjectCongestionTracker,
 };
@@ -97,8 +97,8 @@ use crate::authority::execution_time_estimator::EXTRA_FIELD_EXECUTION_TIME_ESTIM
 use crate::authority::shared_object_version_manager::{
     AssignedTxAndVersions, ConsensusSharedObjVerAssignment, SharedObjVerManager,
 };
-use crate::authority::AuthorityMetrics;
 use crate::authority::ResolverWrapper;
+use crate::authority::{AuthorityMetrics, AuthorityState};
 use crate::checkpoints::{
     BuilderCheckpointSummary, CheckpointHeight, CheckpointServiceNotify, EpochStats,
     PendingCheckpointInfo, PendingCheckpointV2, PendingCheckpointV2Contents,
@@ -120,7 +120,6 @@ use crate::module_cache_metrics::ResolverMetrics;
 use crate::post_consensus_tx_reorder::PostConsensusTxReorder;
 use crate::signature_verifier::*;
 use crate::stake_aggregator::{GenericMultiStakeAggregator, StakeAggregator};
-use crate::wait_for_effects_request::ConsensusTxPosition;
 
 /// The key where the latest consensus index is stored in the database.
 // TODO: Make a single table (e.g., called `variables`) storing all our lonely variables in one place.
@@ -591,186 +590,238 @@ impl AuthorityEpochTables {
     #[cfg(tidehunter)]
     pub fn open(epoch: EpochId, parent_path: &Path, db_options: Option<Options>) -> Self {
         tracing::warn!("AuthorityEpochTables using tidehunter");
-        use typed_store::tidehunter_util::{default_cells_per_mutex, KeySpaceConfig, ThConfig};
+        use typed_store::tidehunter_util::{
+            default_cells_per_mutex, KeyIndexing, KeySpaceConfig, KeyType, ThConfig,
+        };
         const MUTEXES: usize = 1024;
-        const LARGE_KEY_LENGTH: usize = 4096 * 2;
-        let digest_prefix = vec![0, 0, 0, 0, 0, 0, 0, 32];
+        let mut digest_prefix = vec![0; 8];
+        digest_prefix[7] = 32;
+        const VALUE_CACHE_SIZE: usize = 5000;
+        let bloom_config = KeySpaceConfig::new().with_bloom_filter(0.001, 32_000);
+        let lru_bloom_config = bloom_config.clone().with_value_cache_size(VALUE_CACHE_SIZE);
+        let lru_only_config = KeySpaceConfig::new().with_value_cache_size(VALUE_CACHE_SIZE);
+        let pending_checkpoint_signatures_config = KeySpaceConfig::new().disable_unload();
+        let builder_checkpoint_summary_v2_config = pending_checkpoint_signatures_config.clone();
+        let object_ref_indexing = KeyIndexing::hash();
+        let tx_digest_indexing = KeyIndexing::key_reduction(32, 0..16);
+        let uniform_key = KeyType::uniform(default_cells_per_mutex());
+        let sequence_key = KeyType::prefix_uniform(2, 4);
         let configs = vec![
             (
                 "signed_transactions".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
+                ThConfig::new_with_rm_prefix_indexing(
+                    tx_digest_indexing.clone(),
                     MUTEXES,
-                    default_cells_per_mutex(),
-                    KeySpaceConfig::default(),
+                    uniform_key,
+                    lru_bloom_config.clone(),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "owned_object_locked_transactions".to_string(),
-                ThConfig::new(32 + 8 + 32 + 8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config_indexing(
+                    object_ref_indexing,
+                    MUTEXES * 2,
+                    uniform_key,
+                    bloom_config.clone(),
+                ),
             ),
             (
                 "effects_signatures".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
+                ThConfig::new_with_rm_prefix_indexing(
+                    tx_digest_indexing.clone(),
                     MUTEXES,
-                    default_cells_per_mutex(),
-                    KeySpaceConfig::default(),
+                    uniform_key,
+                    lru_bloom_config.clone(),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "signed_effects_digests".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
+                ThConfig::new_with_rm_prefix_indexing(
+                    tx_digest_indexing.clone(),
                     MUTEXES,
-                    default_cells_per_mutex(),
-                    KeySpaceConfig::default(),
+                    uniform_key,
+                    bloom_config.clone(),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "transaction_cert_signatures".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
+                ThConfig::new_with_rm_prefix_indexing(
+                    tx_digest_indexing.clone(),
                     MUTEXES,
-                    default_cells_per_mutex(),
-                    KeySpaceConfig::default(),
+                    uniform_key,
+                    lru_bloom_config.clone(),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "next_shared_object_versions_v2".to_string(),
-                ThConfig::new(32 + 8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config(32 + 8, MUTEXES, uniform_key, lru_only_config.clone()),
             ),
             (
                 "consensus_message_processed".to_string(),
-                ThConfig::new(LARGE_KEY_LENGTH, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config_indexing(
+                    KeyIndexing::Hash,
+                    MUTEXES,
+                    uniform_key,
+                    bloom_config.clone(),
+                ),
             ),
             (
                 "pending_consensus_transactions".to_string(),
-                ThConfig::new(LARGE_KEY_LENGTH, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config_indexing(
+                    KeyIndexing::Hash,
+                    MUTEXES,
+                    uniform_key,
+                    KeySpaceConfig::default(),
+                ),
             ),
             (
                 "last_consensus_stats".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "reconfig_state".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "end_of_publish".to_string(),
-                ThConfig::new(104, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(104, 1, KeyType::uniform(1)),
             ),
             (
                 "builder_digest_to_checkpoint".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
-                    MUTEXES,
-                    default_cells_per_mutex(),
-                    KeySpaceConfig::default(),
+                ThConfig::new_with_rm_prefix_indexing(
+                    tx_digest_indexing.clone(),
+                    MUTEXES * 4,
+                    uniform_key,
+                    lru_bloom_config.clone(),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "transaction_key_to_digest".to_string(),
-                ThConfig::new(1 + 32, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config_indexing(
+                    KeyIndexing::Hash,
+                    MUTEXES,
+                    uniform_key,
+                    KeySpaceConfig::default(),
+                ),
             ),
             (
                 "pending_checkpoint_signatures".to_string(),
-                ThConfig::new(8 + 8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config(
+                    8 + 8,
+                    MUTEXES,
+                    uniform_key,
+                    pending_checkpoint_signatures_config,
+                ),
             ),
             (
                 "builder_checkpoint_summary_v2".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config(
+                    8,
+                    MUTEXES,
+                    sequence_key,
+                    builder_checkpoint_summary_v2_config,
+                ),
             ),
             (
                 "state_hash_by_checkpoint".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config(8, MUTEXES, sequence_key, bloom_config.clone()),
             ),
             (
                 "running_root_accumulators".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config(8, MUTEXES, sequence_key, bloom_config.clone()),
             ),
             (
                 "authority_capabilities".to_string(),
-                ThConfig::new(104, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(104, MUTEXES, uniform_key),
             ),
             (
                 "authority_capabilities_v2".to_string(),
-                ThConfig::new(104, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(104, 1, KeyType::uniform(1)),
             ),
             (
                 "override_protocol_upgrade_buffer_stake".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "executed_transactions_to_checkpoint".to_string(),
-                ThConfig::new_with_rm_prefix(
-                    32,
-                    MUTEXES,
-                    default_cells_per_mutex(),
-                    KeySpaceConfig::default(),
+                ThConfig::new_with_rm_prefix_indexing(
+                    tx_digest_indexing.clone(),
+                    MUTEXES * 4,
+                    uniform_key,
+                    lru_bloom_config.clone(),
                     digest_prefix.clone(),
                 ),
             ),
             (
                 "pending_jwks".to_string(),
-                ThConfig::new(LARGE_KEY_LENGTH, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config_indexing(
+                    KeyIndexing::Hash,
+                    1,
+                    KeyType::uniform(1),
+                    KeySpaceConfig::default(),
+                ),
             ),
             (
                 "active_jwks".to_string(),
-                ThConfig::new(LARGE_KEY_LENGTH, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config_indexing(
+                    KeyIndexing::Hash,
+                    1,
+                    KeyType::uniform(1),
+                    KeySpaceConfig::default(),
+                ),
             ),
             (
                 "deferred_transactions".to_string(),
-                ThConfig::new(1 + 8 + 8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(1 + 8 + 8, MUTEXES, uniform_key),
             ),
             (
                 "deferred_transactions".to_string(),
-                ThConfig::new(1 + 8 + 8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(1 + 8 + 8, MUTEXES, uniform_key),
             ),
             (
                 "dkg_processed_messages_v2".to_string(),
-                ThConfig::new(2, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(2, 1, KeyType::uniform(1)),
             ),
             (
                 "dkg_used_messages_v2".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "dkg_confirmations_v2".to_string(),
-                ThConfig::new(2, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(2, 1, KeyType::uniform(1)),
             ),
             (
                 "dkg_output".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "randomness_next_round".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "randomness_highest_completed_round".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "randomness_last_round_timestamp".to_string(),
-                ThConfig::new(8, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8, 1, KeyType::uniform(1)),
             ),
             (
                 "congestion_control_object_debts".to_string(),
-                ThConfig::new(32, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new_with_config(32, MUTEXES, uniform_key, bloom_config.clone()),
             ),
             (
                 "congestion_control_randomness_object_debts".to_string(),
-                ThConfig::new(32, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(32, MUTEXES, uniform_key),
             ),
             (
                 "execution_time_observations".to_string(),
-                ThConfig::new(8 + 4, MUTEXES, default_cells_per_mutex()),
+                ThConfig::new(8 + 4, MUTEXES, uniform_key),
             ),
         ];
         Self::open_tables_read_write(
@@ -979,6 +1030,7 @@ impl AuthorityPerEpochStore {
             protocol_config.accept_zklogin_in_multisig(),
             protocol_config.accept_passkey_in_multisig(),
             protocol_config.zklogin_max_epoch_upper_bound_delta(),
+            protocol_config.get_aliased_addresses().clone(),
         );
 
         let authenticator_state_exists = epoch_start_configuration
@@ -1160,6 +1212,16 @@ impl AuthorityPerEpochStore {
         result
     }
 
+    pub fn accumulator_root_exists(&self) -> bool {
+        self.epoch_start_configuration
+            .accumulator_root_obj_initial_shared_version()
+            .is_some()
+    }
+
+    pub fn accumulators_enabled(&self) -> bool {
+        self.protocol_config().enable_accumulators() && self.accumulator_root_exists()
+    }
+
     pub fn coin_deny_list_state_exists(&self) -> bool {
         self.epoch_start_configuration
             .coin_deny_list_obj_initial_shared_version()
@@ -1232,29 +1294,59 @@ impl AuthorityPerEpochStore {
         )
     }
 
-    pub fn new_at_next_epoch_for_testing(
+    pub async fn new_at_next_epoch_for_testing(
         &self,
-        backing_package_store: Arc<dyn BackingPackageStore + Send + Sync>,
-        object_store: Arc<dyn ObjectStore + Send + Sync>,
-        expensive_safety_check_config: &ExpensiveSafetyCheckConfig,
-        previous_epoch_last_checkpoint: CheckpointSequenceNumber,
+        authority: &Arc<AuthorityState>,
     ) -> Arc<Self> {
+        use crate::mock_consensus;
+        use sui_network::randomness;
+
         let next_epoch = self.epoch() + 1;
         let next_committee = Committee::new(
             next_epoch,
             self.committee.voting_rights.iter().cloned().collect(),
         );
-        self.new_at_next_epoch(
-            self.name,
-            next_committee,
-            self.epoch_start_configuration
-                .new_at_next_epoch_for_testing(),
-            backing_package_store,
-            object_store,
-            expensive_safety_check_config,
-            previous_epoch_last_checkpoint,
-        )
-        .expect("failed to create new authority per epoch store")
+        let new_epoch = self
+            .new_at_next_epoch(
+                self.name,
+                next_committee,
+                self.epoch_start_configuration
+                    .new_at_next_epoch_for_testing(),
+                authority.get_backing_package_store().clone(),
+                authority.get_object_store().clone(),
+                &authority.config.expensive_safety_check_config,
+                authority
+                    .checkpoint_store
+                    .get_epoch_last_checkpoint(self.epoch())
+                    .unwrap()
+                    .map(|c| *c.sequence_number())
+                    .unwrap_or_default(),
+            )
+            .expect("failed to create new authority per epoch store");
+
+        // Set up randomness manager for the next epoch if randomness is enabled.
+        if self.randomness_state_enabled() {
+            let consensus_client = Box::new(mock_consensus::MockConsensusClient::new(
+                Arc::downgrade(authority),
+                mock_consensus::ConsensusMode::Noop,
+            ));
+            let randomness_manager = RandomnessManager::try_new(
+                Arc::downgrade(&new_epoch),
+                consensus_client,
+                randomness::Handle::new_stub(),
+                authority.config.protocol_key_pair(),
+            )
+            .await;
+            if let Some(randomness_manager) = randomness_manager {
+                // Randomness might fail if test configuration does not permit DKG init.
+                // In that case, skip setting it up.
+                new_epoch
+                    .set_randomness_manager(randomness_manager)
+                    .await
+                    .unwrap();
+            }
+        }
+        new_epoch
     }
 
     pub fn committee(&self) -> &Arc<Committee> {
@@ -4622,12 +4714,32 @@ impl AuthorityPerEpochStore {
 
     pub(crate) fn set_consensus_tx_status(
         &self,
-        position: ConsensusTxPosition,
+        position: ConsensusPosition,
         status: ConsensusTxStatus,
     ) {
         if let Some(cache) = self.consensus_tx_status_cache.as_ref() {
             cache.set_transaction_status(position, status);
         }
+    }
+
+    /// Only used by admin API
+    pub async fn get_estimated_tx_cost(&self, tx: &TransactionData) -> Option<u64> {
+        self.execution_time_estimator
+            .lock()
+            .await
+            .as_ref()
+            .map(|estimator| estimator.get_estimate(tx).as_micros() as u64)
+    }
+
+    pub async fn get_consensus_tx_cost_estimates(
+        &self,
+    ) -> Vec<(ExecutionTimeObservationKey, ConsensusObservations)> {
+        self.execution_time_estimator
+            .lock()
+            .await
+            .as_ref()
+            .map(|estimator| estimator.get_observations())
+            .unwrap_or_default()
     }
 }
 

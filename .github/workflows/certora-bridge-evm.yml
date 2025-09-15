@@ -1,0 +1,57 @@
+name: test
+
+on: pull_request
+
+env:
+  FOUNDRY_PROFILE: ci
+  CONFIGS: |
+    certora/confs/setup/autoCVL_BridgeCommittee.conf
+    certora/confs/setup/autoCVL_BridgeCommittee-nolink.conf
+    certora/confs/setup/autoCVL_BridgeConfig.conf
+    certora/confs/setup/autoCVL_BridgeLimiter.conf
+    certora/confs/setup/autoCVL_BridgeVault.conf
+    certora/confs/setup/autoCVL_SuiBridge.conf
+    certora/confs/setup/sanity_BridgeCommittee.conf
+    certora/confs/setup/sanity_BridgeConfig.conf
+    certora/confs/setup/sanity_BridgeLimiter.conf
+    certora/confs/setup/sanity_BridgeVault.conf
+    certora/confs/setup/sanity_SuiBridge.conf
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+      pull-requests: write
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: install foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: foundry install
+        run: |
+          cd bridge/evm/
+          echo "forge --version"
+          forge --version
+          echo "forge soldeer version"
+          forge soldeer version
+          echo "forge soldeer install"
+          forge soldeer install --recursive-deps --clean
+
+      - name: run configs
+        uses: Certora/certora-run-action@v1
+        with:
+          use-alpha: true
+          configurations: ${{ env.CONFIGS }}
+          solc-versions: 0.8.20
+          solc-remove-version-prefix: "0."
+          job-name: "Verified Rules"
+          certora-key: ${{ secrets.CERTORAKEY }}
+          working-directory: bridge/evm/
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

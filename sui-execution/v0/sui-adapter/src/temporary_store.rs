@@ -152,6 +152,8 @@ impl<'backing> TemporaryStore<'backing> {
                 .map(|(id, (obj, _))| (id, obj))
                 .collect(),
             events: TransactionEvents { data: self.events },
+            // no accumulator events for v0
+            accumulator_events: vec![],
             loaded_runtime_objects: self.loaded_child_objects,
             runtime_packages_loaded_from_db: self.runtime_packages_loaded_from_db.into_inner(),
             lamport_version: self.lamport_timestamp,
@@ -1023,6 +1025,13 @@ impl Storage for TemporaryStore<'_> {
         _written_objects: &BTreeMap<ObjectID, Object>,
     ) -> DenyListResult {
         unreachable!("Coin denylist v2 is not supported in sui-execution v0");
+    }
+
+    fn save_unsequenced_config_accesses(
+        &mut self,
+        _accessed_config_objects: std::collections::BTreeSet<ObjectID>,
+    ) {
+        unreachable!("Unused in v0")
     }
 }
 

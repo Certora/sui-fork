@@ -56,7 +56,7 @@ use sui_types::SUI_FRAMEWORK_ADDRESS;
 use crate::balance_changes::BalanceChange;
 use crate::object_changes::ObjectChange;
 use crate::sui_transaction::GenericSignature::Signature;
-use crate::{Filter, Page, SuiEvent, SuiObjectRef};
+use crate::{Filter, Page, SuiEvent, SuiMoveAbort, SuiObjectRef};
 
 // similar to EpochId of sui-types but BigInt
 pub type SuiEpochId = BigInt<u64>;
@@ -420,6 +420,8 @@ pub enum SuiTransactionBlockKind {
     ConsensusCommitPrologueV2(SuiConsensusCommitPrologueV2),
     ConsensusCommitPrologueV3(SuiConsensusCommitPrologueV3),
     ConsensusCommitPrologueV4(SuiConsensusCommitPrologueV4),
+
+    ProgrammableSystemTransaction(SuiProgrammableTransactionBlock),
     // .. more transaction types go here
 }
 
@@ -472,6 +474,10 @@ impl Display for SuiTransactionBlockKind {
             }
             Self::ProgrammableTransaction(p) => {
                 write!(writer, "Transaction Kind: Programmable")?;
+                write!(writer, "{}", crate::displays::Pretty(p))?;
+            }
+            Self::ProgrammableSystemTransaction(p) => {
+                write!(writer, "Transaction Kind: Programmable System")?;
                 write!(writer, "{}", crate::displays::Pretty(p))?;
             }
             Self::AuthenticatorStateUpdate(_) => {
@@ -533,7 +539,8 @@ impl SuiTransactionBlockKind {
                     additional_state_digest: p.additional_state_digest,
                 })
             }
-            TransactionKind::ProgrammableTransaction(_) => {
+            TransactionKind::ProgrammableTransaction(_)
+            | TransactionKind::ProgrammableSystemTransaction(_) => {
                 // This case is handled separately by the callers
                 unreachable!()
             }
@@ -592,6 +599,9 @@ impl SuiTransactionBlockKind {
                             EndOfEpochTransactionKind::StoreExecutionTimeObservations(_) => {
                                 SuiEndOfEpochTransactionKind::StoreExecutionTimeObservations
                             }
+                            EndOfEpochTransactionKind::AccumulatorRootCreate => {
+                                SuiEndOfEpochTransactionKind::AccumulatorRootCreate
+                            }
                         })
                         .collect(),
                 })
@@ -616,6 +626,15 @@ impl SuiTransactionBlockKind {
         package_resolver: &Resolver<impl PackageStore>,
     ) -> Result<Self, anyhow::Error> {
         match tx {
+            TransactionKind::ProgrammableSystemTransaction(p) => {
+                Ok(Self::ProgrammableSystemTransaction(
+                    SuiProgrammableTransactionBlock::try_from_with_package_resolver(
+                        p,
+                        package_resolver,
+                    )
+                    .await?,
+                ))
+            }
             TransactionKind::ProgrammableTransaction(p) => Ok(Self::ProgrammableTransaction(
                 SuiProgrammableTransactionBlock::try_from_with_package_resolver(
                     p,
@@ -629,7 +648,9 @@ impl SuiTransactionBlockKind {
 
     pub fn transaction_count(&self) -> usize {
         match self {
-            Self::ProgrammableTransaction(p) => p.commands.len(),
+            Self::ProgrammableTransaction(p) | Self::ProgrammableSystemTransaction(p) => {
+                p.commands.len()
+            }
             _ => 1,
         }
     }
@@ -643,6 +664,7 @@ impl SuiTransactionBlockKind {
             Self::ConsensusCommitPrologueV3(_) => "ConsensusCommitPrologueV3",
             Self::ConsensusCommitPrologueV4(_) => "ConsensusCommitPrologueV4",
             Self::ProgrammableTransaction(_) => "ProgrammableTransaction",
+            Self::ProgrammableSystemTransaction(_) => "ProgrammableSystemTransaction",
             Self::AuthenticatorStateUpdate(_) => "AuthenticatorStateUpdate",
             Self::RandomnessStateUpdate(_) => "RandomnessStateUpdate",
             Self::EndOfEpochTransaction(_) => "EndOfEpochTransaction",
@@ -782,7 +804,12 @@ pub struct SuiTransactionBlockEffectsV1 {
     /// The set of transaction digests this transaction depends on.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependencies: Vec<TransactionDigest>,
+    /// The abort error populated if the transaction failed with an abort code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abort_error: Option<SuiMoveAbort>,
 }
+
+// TODO move additional error info here
 
 impl SuiTransactionBlockEffectsAPI for SuiTransactionBlockEffectsV1 {
     fn status(&self) -> &SuiExecutionStatus {
@@ -904,6 +931,7 @@ impl SuiTransactionBlockEffects {
             wrapped: vec![],
             events_digest: None,
             dependencies: vec![],
+            abort_error: None,
         })
     }
 }
@@ -950,6 +978,9 @@ impl TryFrom<TransactionEffects> for SuiTransactionBlockEffects {
                 },
                 events_digest: effect.events_digest().copied(),
                 dependencies: effect.dependencies().to_vec(),
+                abort_error: effect
+                    .move_abort()
+                    .map(|(abort, code)| SuiMoveAbort::new(abort, code)),
             },
         ))
     }
@@ -1654,6 +1685,7 @@ pub enum SuiEndOfEpochTransactionKind {
     BridgeStateCreate(CheckpointDigest),
     BridgeCommitteeUpdate(SequenceNumber),
     StoreExecutionTimeObservations,
+    AccumulatorRootCreate,
 }
 
 #[serde_as]

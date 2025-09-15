@@ -8,6 +8,7 @@ use std::{
 };
 
 use clap::*;
+use fastcrypto::encoding::{Base58, Encoding, Hex};
 use move_vm_config::verifier::VerifierConfig;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -18,7 +19,7 @@ use tracing::{info, warn};
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 85;
+const MAX_PROTOCOL_VERSION: u64 = 86;
 
 // Record history of protocol version allocations here:
 //
@@ -241,6 +242,9 @@ const MAX_PROTOCOL_VERSION: u64 = 85;
 //             Enable nitro attestation upgraded parsing and mainnet.
 // Version 84: Limit number of stored execution time observations between epochs.
 // Version 85: Enable party transfer in devnet.
+// Version 86: Use type tags in the object runtime and adapter instead of `Type`s.
+//             Make variant count limit explicit in protocol config.
+//             Enable epoch stable sequence number in effects for unsequenced config reads.
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -611,6 +615,10 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     validate_identifier_inputs: bool,
 
+    // Disallow self identifier
+    #[serde(skip_serializing_if = "is_false")]
+    disallow_self_identifier: bool,
+
     // Enables Mysticeti fastpath.
     #[serde(skip_serializing_if = "is_false")]
     mysticeti_fastpath: bool,
@@ -700,6 +708,22 @@ struct FeatureFlags {
     // Allow objects created or mutated in system transactions to exceed the max object size limit.
     #[serde(skip_serializing_if = "is_false")]
     allow_unbounded_system_objects: bool,
+
+    // Signifies the cut-over of using type tags instead of `Type`s in the object runtime.
+    #[serde(skip_serializing_if = "is_false")]
+    type_tags_in_object_runtime: bool,
+
+    // Enable accumulators
+    #[serde(skip_serializing_if = "is_false")]
+    enable_accumulators: bool,
+
+    // Rethrow type layout errors during serialization instead of trying to convert them.
+    #[serde(skip_serializing_if = "is_false")]
+    include_epoch_stable_sequence_number_in_effects: bool,
+
+    // Enable statically type checked ptb execution
+    #[serde(skip_serializing_if = "is_false")]
+    enable_ptb_execution_v2: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -708,6 +732,10 @@ fn is_false(b: &bool) -> bool {
 
 fn is_empty(b: &BTreeSet<String>) -> bool {
     b.is_empty()
+}
+
+fn is_zero(val: &u64) -> bool {
+    *val == 0
 }
 
 /// Ordering mechanism for transactions in one Narwhal consensus output.
@@ -748,6 +776,11 @@ pub struct ExecutionTimeEstimateParams {
 
     // Absolute limit on the number of saved observations at end of epoch.
     pub stored_observations_limit: u64,
+
+    // Requires observations from at least this amount of stake in order to use
+    // observation-based execution time estimates instead of the default.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub stake_weighted_median_threshold: u64,
 }
 
 // The config for per object congestion control in consensus handler.
@@ -1501,6 +1534,23 @@ pub struct ProtocolConfig {
 
     /// The number of commits to consider when computing a deterministic commit rate.
     consensus_commit_rate_estimation_window_size: Option<u32>,
+
+    /// A list of effective AliasedAddress.
+    /// For each pair, `aliased` is allowed to act as `original` for any of the transaction digests
+    /// listed in `tx_digests`
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    aliased_addresses: Vec<AliasedAddress>,
+}
+
+/// An aliased address.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct AliasedAddress {
+    /// The original address.
+    pub original: [u8; 32],
+    /// An aliased address which is allowed to act as the original address.
+    pub aliased: [u8; 32],
+    /// A list of transaction digests for which the aliasing is allowed to be in effect.
+    pub allowed_tx_digests: Vec<[u8; 32]>,
 }
 
 // feature flags
@@ -1761,6 +1811,10 @@ impl ProtocolConfig {
         self.feature_flags.enable_coin_deny_list
     }
 
+    pub fn enable_accumulators(&self) -> bool {
+        self.feature_flags.enable_accumulators
+    }
+
     pub fn enable_coin_deny_list_v2(&self) -> bool {
         self.feature_flags.enable_coin_deny_list_v2
     }
@@ -1994,6 +2048,36 @@ impl ProtocolConfig {
 
     pub fn allow_unbounded_system_objects(&self) -> bool {
         self.feature_flags.allow_unbounded_system_objects
+    }
+
+    pub fn get_aliased_addresses(&self) -> &Vec<AliasedAddress> {
+        &self.aliased_addresses
+    }
+
+    pub fn is_tx_allowed_via_aliasing(
+        &self,
+        sender: [u8; 32],
+        signer: [u8; 32],
+        tx_digest: &[u8; 32],
+    ) -> bool {
+        self.aliased_addresses.iter().any(|addr| {
+            addr.original == sender
+                && addr.aliased == signer
+                && addr.allowed_tx_digests.contains(tx_digest)
+        })
+    }
+
+    pub fn type_tags_in_object_runtime(&self) -> bool {
+        self.feature_flags.type_tags_in_object_runtime
+    }
+
+    pub fn include_epoch_stable_sequence_number_in_effects(&self) -> bool {
+        self.feature_flags
+            .include_epoch_stable_sequence_number_in_effects
+    }
+
+    pub fn enable_ptb_execution_v2(&self) -> bool {
+        self.feature_flags.enable_ptb_execution_v2
     }
 }
 
@@ -2551,6 +2635,8 @@ impl ProtocolConfig {
             use_object_per_epoch_marker_table_v2: None,
 
             consensus_commit_rate_estimation_window_size: None,
+
+            aliased_addresses: vec![],
             // When adding a new constant, set it to None in the earliest version, like this:
             // new_constant: None,
         };
@@ -3501,6 +3587,7 @@ impl ProtocolConfig {
                                     max_estimate_us: 1_500_000, // 1.5s
                                     stored_observations_num_included_checkpoints: 10,
                                     stored_observations_limit: u64::MAX,
+                                    stake_weighted_median_threshold: 0,
                                 },
                             );
                     }
@@ -3535,33 +3622,94 @@ impl ProtocolConfig {
                     cfg.feature_flags.max_ptb_value_size_v2 = true;
                 }
                 83 => {
-                    cfg.feature_flags.resolve_type_input_ids_to_defining_id = true;
-                    cfg.transfer_party_transfer_internal_cost_base = Some(52);
+                    if chain == Chain::Mainnet {
+                        // The address that will sign the recovery transaction.
+                        let aliased: [u8; 32] = Hex::decode(
+                            "0x0b2da327ba6a4cacbe75dddd50e6e8bbf81d6496e92d66af9154c61c77f7332f",
+                        )
+                        .unwrap()
+                        .try_into()
+                        .unwrap();
 
-                    // Enable execution time estimate mode for congestion control on mainnet.
-                    cfg.feature_flags.record_additional_state_digest_in_prologue = true;
-                    cfg.consensus_commit_rate_estimation_window_size = Some(10);
-                    cfg.feature_flags.per_object_congestion_control_mode =
-                        PerObjectCongestionControlMode::ExecutionTimeEstimate(
-                            ExecutionTimeEstimateParams {
-                                target_utilization: 30,
-                                allowed_txn_cost_overage_burst_limit_us: 100_000, // 100 ms
-                                randomness_scalar: 20,
-                                max_estimate_us: 1_500_000, // 1.5s
-                                stored_observations_num_included_checkpoints: 10,
-                                stored_observations_limit: u64::MAX,
-                            },
-                        );
+                        // Allow aliasing for the two addresses that contain stolen funds.
+                        cfg.aliased_addresses.push(AliasedAddress {
+                            original: Hex::decode("0xcd8962dad278d8b50fa0f9eb0186bfa4cbdecc6d59377214c88d0286a0ac9562").unwrap().try_into().unwrap(),
+                            aliased,
+                            allowed_tx_digests: vec![
+                                Base58::decode("B2eGLFoMHgj93Ni8dAJBfqGzo8EWSTLBesZzhEpTPA4").unwrap().try_into().unwrap(),
+                            ],
+                        });
 
-                    // Enable the new depth-first block sync logic.
-                    cfg.feature_flags.consensus_batched_block_sync = true;
+                        cfg.aliased_addresses.push(AliasedAddress {
+                            original: Hex::decode("0xe28b50cef1d633ea43d3296a3f6b67ff0312a5f1a99f0af753c85b8b5de8ff06").unwrap().try_into().unwrap(),
+                            aliased,
+                            allowed_tx_digests: vec![
+                                Base58::decode("J4QqSAgp7VrQtQpMy5wDX4QGsCSEZu3U5KuDAkbESAge").unwrap().try_into().unwrap(),
+                            ],
+                        });
+                    }
 
-                    // Enable nitro attestation upgraded parsing logic and enable the
-                    // native function on mainnet.
-                    cfg.feature_flags.enable_nitro_attestation_upgraded_parsing = true;
-                    cfg.feature_flags.enable_nitro_attestation = true;
+                    // These features had to be deferred to v84 for mainnet in order to ship the recovery protocol
+                    // upgrade as a patch to 1.48
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.resolve_type_input_ids_to_defining_id = true;
+                        cfg.transfer_party_transfer_internal_cost_base = Some(52);
+
+                        // Enable execution time estimate mode for congestion control on mainnet.
+                        cfg.feature_flags.record_additional_state_digest_in_prologue = true;
+                        cfg.consensus_commit_rate_estimation_window_size = Some(10);
+                        cfg.feature_flags.per_object_congestion_control_mode =
+                            PerObjectCongestionControlMode::ExecutionTimeEstimate(
+                                ExecutionTimeEstimateParams {
+                                    target_utilization: 30,
+                                    allowed_txn_cost_overage_burst_limit_us: 100_000, // 100 ms
+                                    randomness_scalar: 20,
+                                    max_estimate_us: 1_500_000, // 1.5s
+                                    stored_observations_num_included_checkpoints: 10,
+                                    stored_observations_limit: u64::MAX,
+                                    stake_weighted_median_threshold: 0,
+                                },
+                            );
+
+                        // Enable the new depth-first block sync logic.
+                        cfg.feature_flags.consensus_batched_block_sync = true;
+
+                        // Enable nitro attestation upgraded parsing logic and enable the
+                        // native function on mainnet.
+                        cfg.feature_flags.enable_nitro_attestation_upgraded_parsing = true;
+                        cfg.feature_flags.enable_nitro_attestation = true;
+                    }
                 }
                 84 => {
+                    if chain == Chain::Mainnet {
+                        cfg.feature_flags.resolve_type_input_ids_to_defining_id = true;
+                        cfg.transfer_party_transfer_internal_cost_base = Some(52);
+
+                        // Enable execution time estimate mode for congestion control on mainnet.
+                        cfg.feature_flags.record_additional_state_digest_in_prologue = true;
+                        cfg.consensus_commit_rate_estimation_window_size = Some(10);
+                        cfg.feature_flags.per_object_congestion_control_mode =
+                            PerObjectCongestionControlMode::ExecutionTimeEstimate(
+                                ExecutionTimeEstimateParams {
+                                    target_utilization: 30,
+                                    allowed_txn_cost_overage_burst_limit_us: 100_000, // 100 ms
+                                    randomness_scalar: 20,
+                                    max_estimate_us: 1_500_000, // 1.5s
+                                    stored_observations_num_included_checkpoints: 10,
+                                    stored_observations_limit: u64::MAX,
+                                    stake_weighted_median_threshold: 0,
+                                },
+                            );
+
+                        // Enable the new depth-first block sync logic.
+                        cfg.feature_flags.consensus_batched_block_sync = true;
+
+                        // Enable nitro attestation upgraded parsing logic and enable the
+                        // native function on mainnet.
+                        cfg.feature_flags.enable_nitro_attestation_upgraded_parsing = true;
+                        cfg.feature_flags.enable_nitro_attestation = true;
+                    }
+
                     // Limit the number of stored execution time observations at end of epoch.
                     cfg.feature_flags.per_object_congestion_control_mode =
                         PerObjectCongestionControlMode::ExecutionTimeEstimate(
@@ -3572,6 +3720,7 @@ impl ProtocolConfig {
                                 max_estimate_us: 1_500_000, // 1.5s
                                 stored_observations_num_included_checkpoints: 10,
                                 stored_observations_limit: 20,
+                                stake_weighted_median_threshold: 0,
                             },
                         );
                     cfg.feature_flags.allow_unbounded_system_objects = true;
@@ -3580,6 +3729,42 @@ impl ProtocolConfig {
                     if chain != Chain::Mainnet && chain != Chain::Testnet {
                         cfg.feature_flags.enable_party_transfer = true;
                     }
+
+                    cfg.feature_flags
+                        .record_consensus_determined_version_assignments_in_prologue_v2 = true;
+                    cfg.feature_flags.disallow_self_identifier = true;
+                    cfg.feature_flags.per_object_congestion_control_mode =
+                        PerObjectCongestionControlMode::ExecutionTimeEstimate(
+                            ExecutionTimeEstimateParams {
+                                target_utilization: 50,
+                                allowed_txn_cost_overage_burst_limit_us: 500_000, // 500 ms
+                                randomness_scalar: 20,
+                                max_estimate_us: 1_500_000, // 1.5s
+                                stored_observations_num_included_checkpoints: 10,
+                                stored_observations_limit: 20,
+                                stake_weighted_median_threshold: 0,
+                            },
+                        );
+                }
+                86 => {
+                    cfg.feature_flags.type_tags_in_object_runtime = true;
+                    cfg.max_move_enum_variants = Some(move_core_types::VARIANT_COUNT_MAX);
+
+                    // Set a stake_weighted_median_threshold for congestion control.
+                    cfg.feature_flags.per_object_congestion_control_mode =
+                        PerObjectCongestionControlMode::ExecutionTimeEstimate(
+                            ExecutionTimeEstimateParams {
+                                target_utilization: 50,
+                                allowed_txn_cost_overage_burst_limit_us: 500_000, // 500 ms
+                                randomness_scalar: 20,
+                                max_estimate_us: 1_500_000, // 1.5s
+                                stored_observations_num_included_checkpoints: 10,
+                                stored_observations_limit: 20,
+                                stake_weighted_median_threshold: 3334,
+                            },
+                        );
+                    cfg.feature_flags
+                        .include_epoch_stable_sequence_number_in_effects = true;
                 }
                 // Use this template when making changes:
                 //
@@ -3630,6 +3815,7 @@ impl ProtocolConfig {
             max_back_edges_per_module,
             max_basic_blocks_in_script: None,
             max_idenfitier_len: self.max_move_identifier_len_as_option(), // Before protocol version 9, there was no limit
+            disallow_self_identifier: self.feature_flags.disallow_self_identifier,
             allow_receiving_object_id: self.allow_receiving_object_id(),
             reject_mutable_random_on_entry_functions: self
                 .reject_mutable_random_on_entry_functions(),
@@ -3753,10 +3939,6 @@ impl ProtocolConfig {
             .consensus_round_prober_probe_accepted_rounds = val;
     }
 
-    pub fn set_consensus_linearize_subdag_v2_for_testing(&mut self, val: bool) {
-        self.feature_flags.consensus_linearize_subdag_v2 = val;
-    }
-
     pub fn set_mysticeti_fastpath_for_testing(&mut self, val: bool) {
         self.feature_flags.mysticeti_fastpath = val;
     }
@@ -3765,12 +3947,29 @@ impl ProtocolConfig {
         self.feature_flags.accept_passkey_in_multisig = val;
     }
 
-    pub fn set_consensus_median_based_commit_timestamp_for_testing(&mut self, val: bool) {
-        self.feature_flags.consensus_median_based_commit_timestamp = val;
-    }
-
     pub fn set_consensus_batched_block_sync_for_testing(&mut self, val: bool) {
         self.feature_flags.consensus_batched_block_sync = val;
+    }
+
+    pub fn set_enable_ptb_execution_v2_for_testing(&mut self, val: bool) {
+        self.feature_flags.enable_ptb_execution_v2 = val;
+    }
+
+    pub fn push_aliased_addresses_for_testing(
+        &mut self,
+        original: [u8; 32],
+        aliased: [u8; 32],
+        allowed_tx_digests: Vec<[u8; 32]>,
+    ) {
+        self.aliased_addresses.push(AliasedAddress {
+            original,
+            aliased,
+            allowed_tx_digests,
+        });
+    }
+    pub fn set_include_epoch_stable_sequence_number_in_effects_for_testing(&mut self, val: bool) {
+        self.feature_flags
+            .include_epoch_stable_sequence_number_in_effects = val;
     }
 }
 

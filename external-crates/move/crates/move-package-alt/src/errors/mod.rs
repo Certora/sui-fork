@@ -3,35 +3,24 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod lockfile_error;
-mod manifest_error;
-use append_only_vec::AppendOnlyVec;
-use codespan_reporting::files::SimpleFile;
-use codespan_reporting::files::SimpleFiles;
-mod git_error;
-pub use git_error::GitError;
-pub use git_error::GitErrorKind;
 pub use lockfile_error::LockfileError;
-pub use manifest_error::ManifestError;
-pub use manifest_error::ManifestErrorKind;
 
 mod located;
-pub use located::{Located, with_file};
+mod thefile;
+pub use located::{Located, Location};
+pub use thefile::TheFile;
 
 mod files;
 pub use files::FileHandle;
-pub use resolver_error::ResolverError;
-
-mod resolver_error;
-
-use std::fs;
-use std::path::Path;
-use std::sync::LazyLock;
-use std::sync::Mutex;
-use std::{ops::Range, path::PathBuf};
+pub use files::Files;
 
 use codespan_reporting::diagnostic::Diagnostic;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::dependency::external::ResolverError;
+use crate::git::GitError;
+use crate::package::manifest::ManifestError;
+use crate::package::paths::PackagePathError;
 
 /// Result type for package operations
 pub type PackageResult<T> = Result<T, PackageError>;
@@ -65,22 +54,7 @@ pub enum PackageError {
 
     #[error(transparent)]
     Resolver(#[from] ResolverError),
-}
 
-impl PackageError {
-    pub fn to_diagnostic(&self) -> Diagnostic<usize> {
-        match self {
-            Self::Manifest(err) => err.to_diagnostic(),
-            _ => Diagnostic::error()
-                .with_message(self.to_string())
-                .with_labels(vec![]),
-        }
-    }
-
-    pub fn emit(&self) -> Result<(), codespan_reporting::files::Error> {
-        match self {
-            Self::Manifest(err) => err.emit(),
-            _ => Ok(()),
-        }
-    }
+    #[error(transparent)]
+    PackagePath(#[from] PackagePathError),
 }
