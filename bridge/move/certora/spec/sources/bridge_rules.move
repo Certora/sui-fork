@@ -166,7 +166,6 @@ public fun transfer_records_are_valid(bridge: &mut Bridge,
       
 
       // Must be verified exactly if self is inner chain id is not the source
-      // (in lack of <=> operator)
       cvlm_assert(!self_is_source == is_verified)
     }
 }
