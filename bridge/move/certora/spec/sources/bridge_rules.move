@@ -368,4 +368,9 @@ public fun claim_and_transfer_token_effects<T>(
     total_value_transferred = total_value_transferred + transfer.value().value();
   });
   cvlm_assert(total_supply_after == total_supply_before + total_value_transferred);
+  if (claimed.length() == 1) {
+      cvlm_assert(total_value_transferred > 0);
+  } else {
+      cvlm_assert(total_value_transferred == 0);
+  }
 }
