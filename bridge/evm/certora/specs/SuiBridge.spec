@@ -2,6 +2,7 @@ import "MockTokens.spec";
 import "snippet_BridgeUtils.spec";
 import "setup/snippet_loopSummaries.spec";
 import "setup/snippet_uups.spec";
+import "snippet_verifySignatures.spec";
 
 using BridgeConfig as BridgeConfig;
 using BridgeVault as BridgeVault;
@@ -29,8 +30,6 @@ methods {
     function BridgeUtilsHarness.decodeEmergencyOpPayloadWrapper(bytes _payload) external returns (bool) envfree;
     function BridgeUtilsHarness.convertERC20ToSuiDecimalWrapper(uint8 erc20Decimal, uint8 suiDecimal, uint256 amount) external returns (uint64) envfree;
     function BridgeUtilsHarness.convertSuiToERC20DecimalWrapper(uint8 erc20Decimal, uint8 suiDecimal, uint64 amount) external returns (uint256) envfree;
-
-    function BridgeCommittee.verifySignatures(bytes[] signatures, BridgeUtils.Message message) external => CVL_verifySignatures(message); 
 
     function BridgeVault.owner() external returns (address) envfree;
 }
@@ -66,18 +65,6 @@ hook LOG4(uint offset, uint length, bytes32 t1, bytes32 t2, bytes32 t3, bytes32 
         depositedLogNonce = assert_uint256(t3);
         depositedLogDestinationChainID = assert_uint256(t4);
     }
-}
-
-ghost bool verifySignaturesSuccessful;
-ghost uint8 verifySignaturesMessageType;
-
-function CVL_verifySignatures(BridgeUtils.Message message) {
-    bool nondet;
-    if (nondet) {
-        revert();
-    }
-    verifySignaturesSuccessful = true;
-    verifySignaturesMessageType = message.messageType;
 }
 
 invariant reentrancyguard_not_entered() 
