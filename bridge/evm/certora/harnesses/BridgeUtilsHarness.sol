@@ -28,6 +28,14 @@ contract BridgeUtilsHarness {
         return BridgeUtils.decodeEmergencyOpPayload(_payload);
     }
 
+    function decodeUpdateLimitPayloadWrapper(bytes memory _payload)
+        external
+        pure
+        returns (uint8 senderChainID, uint64 newLimit)
+    {
+        return BridgeUtils.decodeUpdateLimitPayload(_payload);
+    }
+
 
     function convertERC20ToSuiDecimalWrapper(uint8 erc20Decimal, uint8 suiDecimal, uint256 amount)
         external
