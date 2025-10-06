@@ -5,17 +5,9 @@ on: pull_request
 env:
   FOUNDRY_PROFILE: ci
   CONFIGS: |
-    certora/confs/setup/autoCVL_BridgeCommittee.conf
-    certora/confs/setup/autoCVL_BridgeCommittee-nolink.conf
-    certora/confs/setup/autoCVL_BridgeConfig.conf
-    certora/confs/setup/autoCVL_BridgeLimiter.conf
-    certora/confs/setup/autoCVL_BridgeVault.conf
-    certora/confs/setup/autoCVL_SuiBridge.conf
-    certora/confs/setup/sanity_BridgeCommittee.conf
-    certora/confs/setup/sanity_BridgeConfig.conf
-    certora/confs/setup/sanity_BridgeLimiter.conf
-    certora/confs/setup/sanity_BridgeVault.conf
-    certora/confs/setup/sanity_SuiBridge.conf
+    certora/confs/SuiBridge.conf
+    certora/confs/BridgeVault.conf
+    certora/confs/BridgeLimiter.conf
 
 jobs:
   check:
@@ -48,7 +40,7 @@ jobs:
         with:
           use-alpha: true
           configurations: ${{ env.CONFIGS }}
-          solc-versions: 0.8.20
+          solc-versions: 0.4.24 0.8.20
           solc-remove-version-prefix: "0."
           job-name: "Verified Rules"
           certora-key: ${{ secrets.CERTORAKEY }}
