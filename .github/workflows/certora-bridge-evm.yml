@@ -16,6 +16,7 @@ jobs:
       contents: read
       statuses: write
       pull-requests: write
+      id-token: write
     steps:
       - name: checkout repository
         uses: actions/checkout@v4
@@ -38,7 +39,7 @@ jobs:
       - name: run configs
         uses: Certora/certora-run-action@v2
         with:
-          use-alpha: true
+          cli-release: alpha
           configurations: ${{ env.CONFIGS }}
           solc-versions: 0.4.24 0.8.20
           solc-remove-version-prefix: "0."
