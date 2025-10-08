@@ -29,7 +29,7 @@ remove tokens from the vault.
 - The reentrancy `_status` is either `NOT_ENTERED` or `ENTERED`.
 - Outside of transaction it is always `NOT_ENTERED`.
 - transferETH/transferERC20 can only be called if `_status` is `NOT_ENTERED`.
-- Any external non-view calls from transferETH/transferERC20 will have `_status` be `NOT_ENTERED`.
+- For any external non-view calls from transferETH/transferERC20 the `_status` is `ENTERED`.
 
 ### 2. Only Owner transfers out.
 
