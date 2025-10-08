@@ -10,13 +10,17 @@ use bridge::bridge::{
   TokenTransferApproved,
   TokenTransferAlreadyApproved,
   unwrap_deposited_event,
+  transfer_status_not_found,
+  transfer_status_pending,
+  transfer_status_approved,
+  transfer_status_claimed,
   test_get_parsed_token_transfer_message,
 };
 use bridge::bridge_env::{get_total_supply};
 use bridge::message::{BridgeMessage,  get_transfer_payload};
 use bridge::message_types;
 use certora::sui_object_summaries::deleted;
-use cvlm::asserts::{cvlm_assert, cvlm_assume_msg};
+use cvlm::asserts::{cvlm_assert, cvlm_assert_msg, cvlm_assume_msg};
 use cvlm::ghost::{ghost_destroy, };
 use cvlm::manifest::{rule, target, invoker, target_sanity};
 use sui::address;
@@ -53,6 +57,8 @@ public fun cvlm_manifest() {
   rule(b"approve_token_transfer_effects");
   rule(b"claim_token_effects");
   rule(b"claim_and_transfer_token_effects");
+  rule(b"transfer_record_status_changes");
+  rule(b"check_invariant_pending_status_only_for_internal_transfers");
 }
 
 
@@ -283,7 +289,9 @@ public fun claim_token_effects<T>(
 
   let total_supply_before = get_total_supply<T>(bridge);
 
+  let statusBefore = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
   let token = bridge.claim_token<T>(clock, source_chain, bridge_seq_num, ctx);
+  let statusAfter = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
 
   let token_value = token.value();
   cvlm_assert(total_supply_before + token_value == get_total_supply<T>(bridge));
@@ -292,21 +300,26 @@ public fun claim_token_effects<T>(
   let already_claimed = events_by_type<TokenTransferAlreadyClaimed>();
   let limit_exceeded = events_by_type<TokenTransferLimitExceed>();
 
-  cvlm_assert(claimed.length() + already_claimed.length() + limit_exceeded.length() == 1);
+  //cvlm_assert(claimed.length() + already_claimed.length() + limit_exceeded.length() == 1);
+  cvlm_assert(claimed.length() == 1);
+  cvlm_assert(already_claimed.length() == 0);
+  cvlm_assert(limit_exceeded.length() == 0);
 
-  let key = if (claimed.length() == 1) {
-    claimed[0].transfer_claimed_key()
-  } else if (already_claimed.length() == 1) {
-    already_claimed[0].transfer_already_claimed_key()
-  } else {
-    limit_exceeded[0].transfer_limit_exceed_key()
-  };
+  let key = claimed[0].transfer_claimed_key();
 
   let (sc, mt, sn) = key.unpack_message();
 
   cvlm_assert(source_chain == sc);
   cvlm_assert(mt == message_types::token());
   cvlm_assert(sn == bridge_seq_num);
+
+  cvlm_assert(statusBefore == transfer_status_approved());
+  cvlm_assert(statusAfter == transfer_status_claimed());
+
+  let record = &bridge.test_load_inner().inner_token_transfer_records()[key];
+  let token_payload = record.message().extract_token_bridge_payload();
+
+  cvlm_assert(token_payload.token_amount() == token_value);
 
   token
 }
@@ -363,14 +376,64 @@ public fun claim_and_transfer_token_effects<T>(
   let total_supply_after = get_total_supply<T>(bridge);
 
   let transfers = certora::sui_transfer_summaries::transfers<Coin<T>>();
-  let mut total_value_transferred = 0;
-  transfers.do_ref!(|transfer| {
-    total_value_transferred = total_value_transferred + transfer.value().value();
-  });
-  cvlm_assert(total_supply_after == total_supply_before + total_value_transferred);
+  let record = &bridge.test_load_inner().inner_token_transfer_records()[key];
+  let token_payload = record.message().extract_token_bridge_payload();
   if (claimed.length() == 1) {
-      cvlm_assert(total_value_transferred > 0);
+    cvlm_assert(transfers.length() == 1);
+    cvlm_assert(transfers[0].value().value() == token_payload.token_amount());
+    cvlm_assert(total_supply_after == total_supply_before + token_payload.token_amount());
   } else {
-      cvlm_assert(total_value_transferred == 0);
+    cvlm_assert(transfers.length() == 0);
+    cvlm_assert(total_supply_after == total_supply_before);
   }
+}
+
+// #[rule]
+/// The status of a transfer record can only change according to
+/// the state machine `not_found -> pending -> approved -> claimed`.
+/// Once it is claimed, it always stays claimed.
+public fun transfer_record_status_changes(bridge: &mut Bridge,
+  source_chain: u8,
+  bridge_seq_num: u64,
+  fn: Function,
+  ctx: &mut TxContext,
+  state: &mut SuiSystemState
+) {
+
+  let statusBefore = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
+
+  invoke(fn, bridge, ctx, state);
+
+  let statusAfter = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
+
+  cvlm_assert(statusBefore != transfer_status_not_found() ||
+    statusAfter == transfer_status_not_found() || statusAfter == transfer_status_pending() || statusAfter == transfer_status_approved());
+  cvlm_assert(statusBefore != transfer_status_pending() ||
+    statusAfter == transfer_status_pending() || statusAfter == transfer_status_approved());
+  cvlm_assert(statusBefore != transfer_status_approved() ||
+    statusAfter == transfer_status_approved() || statusAfter == transfer_status_claimed());
+  cvlm_assert(statusBefore != transfer_status_claimed() || statusAfter == transfer_status_claimed());
+
+}
+
+/// Check that all pending transfers must be internal transfers (source_chain == inner.chain_id).
+fun invariant_pending_status_only_for_internal_transfers(bridge: &mut Bridge, 
+  source_chain: u8,
+  bridge_seq_num: u64
+) : bool {
+  let status = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
+  status != transfer_status_pending() || source_chain == bridge.test_load_inner().chain_id()
+}
+
+/// Check that all pending transfers must be internal transfers (source_chain == inner.chain_id).
+public fun check_invariant_pending_status_only_for_internal_transfers(bridge: &mut Bridge, 
+  source_chain: u8,
+  bridge_seq_num: u64,
+  fn: Function,
+  ctx: &mut TxContext,
+  state: &mut SuiSystemState
+) {
+  cvlm_assume_msg(invariant_pending_status_only_for_internal_transfers(bridge, source_chain, bridge_seq_num), b"invariant holds before");
+  invoke(fn, bridge, ctx, state);
+  cvlm_assert_msg(invariant_pending_status_only_for_internal_transfers(bridge, source_chain, bridge_seq_num), b"invariant holds after");
 }
