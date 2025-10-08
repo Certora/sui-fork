@@ -5,17 +5,9 @@ on: pull_request
 env:
   FOUNDRY_PROFILE: ci
   CONFIGS: |
-    certora/confs/setup/autoCVL_BridgeCommittee.conf
-    certora/confs/setup/autoCVL_BridgeCommittee-nolink.conf
-    certora/confs/setup/autoCVL_BridgeConfig.conf
-    certora/confs/setup/autoCVL_BridgeLimiter.conf
-    certora/confs/setup/autoCVL_BridgeVault.conf
-    certora/confs/setup/autoCVL_SuiBridge.conf
-    certora/confs/setup/sanity_BridgeCommittee.conf
-    certora/confs/setup/sanity_BridgeConfig.conf
-    certora/confs/setup/sanity_BridgeLimiter.conf
-    certora/confs/setup/sanity_BridgeVault.conf
-    certora/confs/setup/sanity_SuiBridge.conf
+    certora/confs/SuiBridge.conf
+    certora/confs/BridgeVault.conf
+    certora/confs/BridgeLimiter.conf
 
 jobs:
   check:
@@ -24,6 +16,7 @@ jobs:
       contents: read
       statuses: write
       pull-requests: write
+      id-token: write
     steps:
       - name: checkout repository
         uses: actions/checkout@v4
@@ -44,11 +37,10 @@ jobs:
           forge soldeer install --recursive-deps --clean
 
       - name: run configs
-        uses: Certora/certora-run-action@v1
+        uses: Certora/certora-run-action@v2
         with:
-          use-alpha: true
           configurations: ${{ env.CONFIGS }}
-          solc-versions: 0.8.20
+          solc-versions: 0.4.24 0.8.20
           solc-remove-version-prefix: "0."
           job-name: "Verified Rules"
           certora-key: ${{ secrets.CERTORAKEY }}
