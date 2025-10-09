@@ -30,6 +30,7 @@ use sui::event::events_by_type;
 use cvlm::nondet::nondet;
 use cvlm::function::Function;
 use sui_system::sui_system::SuiSystemState;
+use sui_system::test_runner::start_epoch;
 
 
 
@@ -59,6 +60,7 @@ public fun cvlm_manifest() {
   rule(b"claim_and_transfer_token_effects");
   rule(b"transfer_record_status_changes");
   rule(b"check_invariant_pending_status_only_for_internal_transfers");
+  rule(b"only_approveTransfer_can_approve_transfer");
 }
 
 
@@ -129,12 +131,6 @@ public fun only_owner_can_claim<T>(
   let target = address::from_bytes(target_address);
   log(&target);
 
-  // This fails because `target` here is different from  from the target_address when executing the claim function.
-  // That should not happen.
-  // 
-  // My guess is that this is because the transfer record is stored as bytes that are deserialized in the `extract_token_bridge_payload` function.
-  // Since the BCS summaries are nondet, they might be return different values for the same object.
-  // It's hard to verify because the prover only shows the first 3 elements of a vector.
   cvlm_assert(target == ctx.sender());
   ghost_destroy(c)
 }
@@ -246,7 +242,10 @@ public fun approve_token_transfer_effects(
     b"start with zero TokenTransferAlreadyApproved",
   );
 
+  let statusBefore = bridge.test_get_token_transfer_action_status(message.source_chain(), message.seq_num());
   bridge.approve_token_transfer(message, signatures);
+  let statusAfter = bridge.test_get_token_transfer_action_status(message.source_chain(), message.seq_num());
+
 
   // verify approval events
   let approved_events = events_by_type<TokenTransferApproved>();
@@ -259,11 +258,18 @@ public fun approve_token_transfer_effects(
   } else {
     already_approved_events[0].transfer_already_approved_key()
   };
+  if (approved_events.length() ==1) {
+    cvlm_assert(statusBefore == transfer_status_not_found() || statusBefore == transfer_status_pending());
+  } else {
+    cvlm_assert(statusBefore == transfer_status_approved());
+  };
 
-  let (_sc, mt, sn) = key.unpack_message();
+  let (sc, mt, sn) = key.unpack_message();
 
+  cvlm_assert(sc == message.source_chain());
   cvlm_assert(mt == message_types::token());
   cvlm_assert(sn == message.seq_num());
+  cvlm_assert(statusAfter == transfer_status_approved());
 }
 
 // #[rule]
@@ -413,7 +419,24 @@ public fun transfer_record_status_changes(bridge: &mut Bridge,
   cvlm_assert(statusBefore != transfer_status_approved() ||
     statusAfter == transfer_status_approved() || statusAfter == transfer_status_claimed());
   cvlm_assert(statusBefore != transfer_status_claimed() || statusAfter == transfer_status_claimed());
+}
 
+public fun only_approveTransfer_can_approve_transfer(bridge: &mut Bridge,
+  source_chain: u8,
+  bridge_seq_num: u64,
+  fn: Function,
+  ctx: &mut TxContext,
+  state: &mut SuiSystemState
+) {
+  let statusBefore = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
+
+  invoke(fn, bridge, ctx, state);
+
+  let statusAfter = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
+
+  if (fn.name() != b"approve_token_transfer") {
+    cvlm_assert(statusBefore == transfer_status_approved() || statusAfter != transfer_status_approved());
+  }
 }
 
 /// Check that all pending transfers must be internal transfers (source_chain == inner.chain_id).
