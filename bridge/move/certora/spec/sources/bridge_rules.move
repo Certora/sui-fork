@@ -16,7 +16,7 @@ use bridge::bridge::{
   transfer_status_claimed,
   test_get_parsed_token_transfer_message,
 };
-use bridge::bridge_env::{get_total_supply};
+use bridge::bridge_env::{get_total_supply, get_total_supply_if_registered};
 use bridge::message::{BridgeMessage,  get_transfer_payload};
 use bridge::message_types;
 use certora::sui_object_summaries::deleted;
@@ -96,15 +96,15 @@ public fun only_claiming_mints_tokens<T>(
   ctx: &mut TxContext,
   state: &mut SuiSystemState
 ) {
-
-  let balance_pre = get_total_supply<T>(bridge);
+  let balance_pre = get_total_supply_if_registered<T>(bridge);
 
   invoke(fn, bridge, ctx, state);
 
-  let balance_post = get_total_supply<T>(bridge);
+  let balance_post = get_total_supply_if_registered<T>(bridge);
 
-  if (balance_pre < balance_post) {
-    cvlm_assert(fn.name() == b"claim_token" || fn.name() == b"claim_and_transfer_token")
+  match (fn.name()) {
+    b"claim_token" | b"claim_and_transfer_token" => {},
+    _ => cvlm_assert(balance_post.get_with_default(0) <= balance_pre.get_with_default(0))
   }
 }
 
