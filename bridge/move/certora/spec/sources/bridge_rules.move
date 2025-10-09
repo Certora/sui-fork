@@ -241,6 +241,7 @@ public fun approve_token_transfer_effects(
     events_by_type<TokenTransferAlreadyApproved>().length() == 0,
     b"start with zero TokenTransferAlreadyApproved",
   );
+  cvlm_assume_msg(invariant_pending_status_only_for_internal_transfers(bridge, message.source_chain(), message.seq_num()), b"invariant_pending_status_only_for_internal_transfers");
 
   let statusBefore = bridge.test_get_token_transfer_action_status(message.source_chain(), message.seq_num());
   bridge.approve_token_transfer(message, signatures);
@@ -260,8 +261,10 @@ public fun approve_token_transfer_effects(
   };
   if (approved_events.length() ==1) {
     cvlm_assert(statusBefore == transfer_status_not_found() || statusBefore == transfer_status_pending());
+    cvlm_assert(statusAfter == transfer_status_approved());
   } else {
-    cvlm_assert(statusBefore == transfer_status_approved());
+    cvlm_assert(statusBefore == transfer_status_approved() || statusBefore == transfer_status_claimed());
+    cvlm_assert(statusAfter == statusBefore);
   };
 
   let (sc, mt, sn) = key.unpack_message();
@@ -269,7 +272,6 @@ public fun approve_token_transfer_effects(
   cvlm_assert(sc == message.source_chain());
   cvlm_assert(mt == message_types::token());
   cvlm_assert(sn == message.seq_num());
-  cvlm_assert(statusAfter == transfer_status_approved());
 }
 
 // #[rule]
