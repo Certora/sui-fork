@@ -30,7 +30,6 @@ use sui::event::events_by_type;
 use cvlm::nondet::nondet;
 use cvlm::function::Function;
 use sui_system::sui_system::SuiSystemState;
-use sui_system::test_runner::start_epoch;
 
 
 
@@ -59,8 +58,8 @@ public fun cvlm_manifest() {
   rule(b"claim_token_effects");
   rule(b"claim_and_transfer_token_effects");
   rule(b"transfer_record_status_changes");
+  rule(b"only_approve_token_transfer_can_approve_transfer");
   rule(b"check_invariant_pending_status_only_for_internal_transfers");
-  rule(b"only_approveTransfer_can_approve_transfer");
 }
 
 
@@ -207,6 +206,7 @@ public fun send_token_effects<T>(
 
   let seq_num = bridge.get_seq_num_for(message_types::token());
   bridge.send_token(target_chain, target_address, coin, ctx);
+  cvlm_assert(bridge.get_seq_num_for(message_types::token()) == seq_num + 1);
 
   // verify reduction in total supply
   cvlm_assert(total_supply_before - coin_value == get_total_supply<T>(bridge));
@@ -359,7 +359,9 @@ public fun claim_and_transfer_token_effects<T>(
 
   let total_supply_before = get_total_supply<T>(bridge);
 
+  let statusBefore = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
   bridge.claim_and_transfer_token<T>(clock, source_chain, bridge_seq_num, ctx);
+  let statusAfter = bridge.test_get_token_transfer_action_status(source_chain, bridge_seq_num);
 
   let claimed = events_by_type<TokenTransferClaimed>();
   let already_claimed = events_by_type<TokenTransferAlreadyClaimed>();
@@ -390,9 +392,12 @@ public fun claim_and_transfer_token_effects<T>(
     cvlm_assert(transfers.length() == 1);
     cvlm_assert(transfers[0].value().value() == token_payload.token_amount());
     cvlm_assert(total_supply_after == total_supply_before + token_payload.token_amount());
+    cvlm_assert(statusBefore == transfer_status_approved());
+    cvlm_assert(statusAfter == transfer_status_claimed());
   } else {
     cvlm_assert(transfers.length() == 0);
     cvlm_assert(total_supply_after == total_supply_before);
+    cvlm_assert(statusBefore == statusAfter);
   }
 }
 
@@ -423,7 +428,7 @@ public fun transfer_record_status_changes(bridge: &mut Bridge,
   cvlm_assert(statusBefore != transfer_status_claimed() || statusAfter == transfer_status_claimed());
 }
 
-public fun only_approveTransfer_can_approve_transfer(bridge: &mut Bridge,
+public fun only_approve_token_transfer_can_approve_transfer(bridge: &mut Bridge,
   source_chain: u8,
   bridge_seq_num: u64,
   fn: Function,
