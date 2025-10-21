@@ -1,7 +1,6 @@
 import "MockTokens.spec";
 import "snippet_BridgeUtils.spec";
-import "setup/snippet_loopSummaries.spec";
-import "setup/snippet_uups.spec";
+import "snippet_loopSummaries.spec";
 import "snippet_verifySignatures.spec";
 
 using BridgeConfig as BridgeConfig;
