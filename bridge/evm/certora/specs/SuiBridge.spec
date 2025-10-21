@@ -293,7 +293,8 @@ rule tokenDepositedImpliesTokenVaulted(method f) {
 rule only_transferBridgedTokens_can_remove_tokens(method f) 
 filtered {
     f -> f.selector != sig:transferBridgedTokensWithSignatures(bytes[],BridgeUtils.Message).selector &&
-         f.contract != WETH // ignore calling transferFrom or transfer on the token directly
+         f.contract != WETH && // ignore calling transferFrom or transfer on the token directly
+         f.contract != BridgeVault // ignore calling the BridgeVault functions that are protected by ownership
 }
 {
     env e;

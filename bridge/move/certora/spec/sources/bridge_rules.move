@@ -32,7 +32,6 @@ use cvlm::function::Function;
 use sui_system::sui_system::SuiSystemState;
 
 
-
 public fun cvlm_manifest() {
   target(@bridge, b"bridge", b"committee_registration");
   target(@bridge, b"bridge", b"update_node_url");

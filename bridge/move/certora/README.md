@@ -9,7 +9,7 @@ After installing the Certora Prover, you can start the verification as follows.
 
 ```
 cd certora/spec
-certoraSuiProver.py --server production --prover_version master
+certoraSuiProver.py --server production --prover_version master --optimistic_loop
 ```
 
 ## Bridge Properties

@@ -168,6 +168,7 @@ rule updateLimit_integrity() {
     assert currentContract.nonces[BridgeUtilsHarness.UPDATE_BRIDGE_LIMIT()] == expectedNonce + 1;
     assert BridgeConfig.isChainSupported(sourceChainId);
     assert newLimit == limitAfter;
+    assert chainLimits(sourceChainId) == newLimit;
     assert verifySignaturesSuccessful;
     assert verifySignaturesMessageType == BridgeUtilsHarness.UPDATE_BRIDGE_LIMIT();
 }

@@ -244,6 +244,13 @@ rule transferETH_self {
     assert balanceDiff == 0 && nativeBalanceDiff == 0, "No balance change expected";
 }
 
+// The invariant nativeVaultBalance checks that the native balance of the vault is always zero.
+// This is because the vault should never hold native ETH, it should always wrap any incoming
+// ETH into WETH.  However, there are a few exceptions: the contract address can have already
+// received ETH before the vault was deployed, or self-destructs or withdraws from the
+// beaconchain can send ETH to the vault, which we cannot prevent.  Therefore, we removed this
+// check.
+/*
 invariant nativeVaultBalance()
     nativeBalances[currentContract] == 0
 {
@@ -255,3 +262,4 @@ invariant nativeVaultBalance()
         require e.msg.sender != currentContract && e.msg.sender != WETH, "prevent unexpected calls from WETH or Vault itself";
     }
 }
+*/
