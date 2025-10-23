@@ -38,8 +38,8 @@ module bridge::bridge_env {
     use bridge::usdc::{Self, USDC};
     use bridge::usdt::{Self, USDT};
     use std::ascii::String;
-    use std::type_name;
     use std::option::{Option, some, none};
+    use std::type_name;
     use sui::address;
     use sui::clock::Clock;
     use sui::coin::{Self, Coin, CoinMetadata, TreasuryCap};

@@ -903,12 +903,10 @@ public fun unwrap_emergency_op_event(event: EmergencyOpEvent): bool {
     event.frozen
 }
 
-
-#[test_only] 
+#[test_only]
 public fun verified_signatures(rec: &BridgeRecord): &Option<vector<vector<u8>>> {
     &rec.verified_signatures
 }
-
 
 #[test_only]
 public fun message(rec: &BridgeRecord): &BridgeMessage {
