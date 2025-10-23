@@ -47,6 +47,11 @@ filtered { f-> f.selector != sig:initialize(address,uint8[],uint64[]).selector &
                f.selector != sig:updateLimitWithSignatures(bytes[], BridgeUtils.Message).selector }
 {
     preserved BridgeLimiter.recordBridgeTransfers(uint8 chainId2, uint8 tokenId, uint256 amount) with (env e) {
+        /* Since recordBridgeTransfer only checks the limit for the current hour, not for future hours,
+         * we require the invariant that all hourly transfers that lie in the future are 0.
+         * We need this invariant for all hours that are accessed by the second calculateWindowAmount call
+         * (from hour-23 to hour).
+         */
         requireInvariant hourlyTransferAmountsZeroForFuture(chainId, require_uint32(hour));
         requireInvariant hourlyTransferAmountsZeroForFuture(chainId, require_uint32(hour-1));
         requireInvariant hourlyTransferAmountsZeroForFuture(chainId, require_uint32(hour-2));
@@ -104,13 +109,16 @@ rule windowAmountCannotDecreaseWithoutPassingTime {
     uint256 windowAfter = calculateWindowAmount(e3, chainId);
 
     assert e1.block.timestamp == e3.block.timestamp => windowAfter >= windowBefore;
-    //assert windowAfter <= chainLimits(chainId);
 }
 
 rule windowDecreasesOverTime {
     env e1;
     env e2;
     uint8 chainId;
+    /* For this rule, we require the invariant that all hourly transfers that lie in the future are 0.
+     * We need this invariant for all hours that are accessed by the second caculateWindowAmount call,
+     * which are for the hour of the timestamp in e2 and the previous 24 hours.
+     */
     requireInvariant hourlyTransferAmountsZeroForFuture(chainId, require_uint32(e2.block.timestamp/hour()));
     requireInvariant hourlyTransferAmountsZeroForFuture(chainId, require_uint32(e2.block.timestamp/hour()-1));
     requireInvariant hourlyTransferAmountsZeroForFuture(chainId, require_uint32(e2.block.timestamp/hour()-2));
