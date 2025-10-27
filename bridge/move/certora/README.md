@@ -5,11 +5,18 @@
 The installation instructions for the Certora Prover are described in: 
 (Installation of Certora Prover)[https://docs.certora.com/en/latest/docs/user-guide/install.html]. Note you will need an appropriate Java version for the local type-checking to work.
 
+
+Note that currently you need the beta version of the certora prover.  If you already have certora-cli installed, you need to uninstall it first:
+```
+pip uninstall certora-cli
+pip install certora-cli-beta
+```
+
 After installing the Certora Prover, you can start the verification as follows.
 
 ```
-cd certora/spec
-certoraSuiProver.py --server production --prover_version master --optimistic_loop
+cd bridge/move/certora/spec
+certoraSuiProver Bridge.conf --prover_version master
 ```
 
 ## Bridge Properties
