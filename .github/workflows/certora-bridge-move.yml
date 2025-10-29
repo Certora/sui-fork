@@ -1,0 +1,40 @@
+name: Certora move verification
+
+on: pull_request
+
+env:
+  FOUNDRY_PROFILE: ci
+  CONFIGS: |
+    Bridge.conf
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install sui
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/Mystenlabs/suiup/main/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          suiup install -y sui@testnet
+
+      - name: run configs
+        uses: Certora/certora-run-action@v2
+        with:
+          ecosystem: sui
+          configurations: ${{ env.CONFIGS }}
+          job-name: "Verified Sui Rules"
+          certora-key: ${{ secrets.CERTORAKEY }}
+          working-directory: bridge/move/certora/spec
+          cli-release: beta
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

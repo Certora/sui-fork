@@ -1,4 +1,4 @@
-name: test
+name: Certora evm verification
 
 on: pull_request
 
