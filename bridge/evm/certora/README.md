@@ -1,0 +1,119 @@
+# Certora Verification of the EVM part of the SUI Bridge
+
+## Installation and Running
+
+The installation instructions for the Certora Prover are described in: 
+(Installation of Certora Prover)[https://docs.certora.com/en/latest/docs/user-guide/install.html]. Note you will need an appropriate Java version for the local type-checking to work.
+
+You will also need solidity compiler versions 0.4.24 (for the WETH token) and 0.8.20.
+You can download these to a folder included in your PATH and name them solc4.24 and solc8.20.
+
+After installing the Certora Prover, you can start the verification as follows.
+
+```
+certoraRun certora/conf/SuiBridge.conf
+certoraRun certora/conf/BridgeVault.conf
+certoraRun certora/conf/BridgeLimiter.conf
+```
+
+
+## BridgeVault Properties
+
+The bridge vault holds all tokens that were bridged to SUI and not reclaimed.
+We verified that reentrancy locks work as expected, that the transfer functions
+transfer tokens correctly and that only the owner (the SuiBridge contract) can
+remove tokens from the vault.
+
+### 1. Reentrancy locks
+
+- The reentrancy `_status` is either `NOT_ENTERED` or `ENTERED`.
+- Outside of transaction it is always `NOT_ENTERED`.
+- transferETH/transferERC20 can only be called if `_status` is `NOT_ENTERED`.
+- For any external non-view calls from transferETH/transferERC20 the `_status` is `ENTERED`.
+
+### 2. Only Owner transfers out.
+
+- If the balance of some token decreases for the Vault, then only because the owner did this.
+- The owner can only be changed by the old owner.
+- The Vault will never `approve()` token transfers.
+
+### 3. Integrity rules for transferERC20/ETH
+
+- For a normal transfer the balances change as expected:
+    - For transferERC20: the receiver balance increase, the Vault balance decrease.
+    - For transferETH: the WETH token balance of the Vault decreases and the native balance of the receiver increases, and as a side-effect the native balance of the WETH contract decreases.
+    - no other balance change of any other contract occurs.
+- For a self transfer (receiver == Vault) nothing changes.
+- A transferETH to the WETH contract acts like a self transfer.
+- The native balance of the Vault will always be 0, except temporarily during transferETH.
+
+## SuiBridge Properties
+
+### 1. Transfer Amount Movement
+
+Bridging moves the expected amount of money from one chain to another.  (I am deliberately avoiding the word “solvency” here since I think this is an overloaded term that also does not really apply to bridges.)
+
+1. ERC20 case: Calling bridgeERC20 followed by transferBridgedTokensWithSignatures (where the recipientAddress of the bridge call is the same as the BridgeUtils.Message.recipientAddress) transfers `amount` worth of the bridged ERC20 from the caller and debits the recipient with the equivalent amount worth of the target chain token. In more detail:
+    1. balance of bridgeERC20 caller decreases by `amount` worth of ERC20
+    2. balance of recipient on destination token increase by the `amount` **converted into the destination token.** (Note conversion in this direction multiplies by a factor related to the decimal precision of Sui and the destination token so there should not be loss of precision here)
+2. ETH case: same as above but using bridgeETH and using msg.value instead of an amount parameter
+
+(Note movement of funds in an out of the vault is an implementation detail deliberately not captured here)
+
+### 2. Validity of Bridging Transactions
+
+If either bridge method is called, then:
+
+1. the sender must have had greater balance than the target amount before the call
+2. the bridge contract must have allowance greater than amount (where the owner is the caller)
+
+### 3. Authorization
+
+Rules about circumstances under which methods can be called
+
+1. bridgeETH can only be called when not paused and on a a supported destination chain
+→ `bridgeETH_integrity`
+2. bridgeETH cannot be called by the SuiBridge (it’s nonReentrant)
+→ `nonReentrant_functions` 
+3. bridgeERC20 can only be called when not paused and on a a supported destination chain
+→ `bridgeERC20_integrity`
+4. bridgeERC20 cannot be called by the SuiBridge (it’s nonReentrant)
+→ `nonReentrant_functions` 
+5. The return value of paused() is unchanged by calls other than executeEmergencyOpWithSignatures
+→ `only_emergency_operation_changes_pause_status`
+6. executeEmergencyOpWithSignatures succeeds only with a valid TokenTransfer Signature
+
+### 4. Bridge Limits Integrity
+
+A. Money cannot be bridged (i.e. moved with transferBridgedTokensWIthSignatures) without this movement being recorded in the bridge limiter (within the scope of public Bridge function calls)
+
+1. Adendum on implementation detail: also money cannot move out of the vault without this being recorded
+
+B. The total amount bridged does not exceed the limit imposed by the limiter
+
+### 5. Event generation
+
+Since the rust code trusts events generated by the contract, we may want to have rules regarding this:
+
+1. For every TokensDeposit event generated, the vault’s token balance need to increase by the specified amount.  → `tokenDepositedImpliesTokenVaulted`
+
+### 6. Nonce handling
+
+1. Every signed message can only be used in one transferBridgedTokensWithSignatures  call.
+→ `processed_nonces_monotonic` and `transferBridgedTokens_integrity` asserting `!processedBefore` and `processedAfter`
+2. The vault balance can only decrease if there is a signed message with the amount and the message’s nonce must be marked as used by the same transaction.
+→ `only_transferBridgedTokens_can_remove_tokens` and `transferBridgedTokens_integrity`
+
+
+## BridgeLimiter Properties
+
+### 1. Integrity of willAmountExceedLimit (willUSDAmountExceedLimit)
+
+A. calling recordBridgeTransfers  will increase the amount transferred for the hour the block timestamp of the call
+B. the function prevents exceeding the transfer limit and cause a revert.
+C. No function call causes the transferred amount (calculateWindowAmount) to decrease, assuming time does not elapse.
+
+### 2. Scoping and integrity of updateLimit
+
+A. the limit for an arbitrary chain cannot be changed other than with: initialize, updateLimitWithSignatures
+B. If updateLimitWithSignatures is successful, it must have been called with valid signatures (and the correspoinding message type)

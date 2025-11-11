@@ -38,6 +38,7 @@ module bridge::bridge_env {
     use bridge::usdc::{Self, USDC};
     use bridge::usdt::{Self, USDT};
     use std::ascii::String;
+    use std::option::{Option, some, none};
     use std::type_name;
     use sui::address;
     use sui::clock::Clock;
@@ -1152,12 +1153,25 @@ module bridge::bridge_env {
         coin
     }
 
-    fun get_total_supply<T>(bridge: &Bridge): u64 {
+    public fun get_total_supply<T>(bridge: &Bridge): u64 {
         let inner = bridge.test_load_inner();
         let treasury = inner.inner_treasury();
         let treasuries = treasury.treasuries();
         let tc: &TreasuryCap<T> = &treasuries[type_name::get<T>()];
         tc.total_supply()
+    }
+
+    public fun get_total_supply_if_registered<T>(bridge: &Bridge): Option<u64> {
+        let inner = bridge.test_load_inner();
+        let treasury = inner.inner_treasury();
+        let treasuries = treasury.treasuries();
+        let t_name = type_name::get<T>();
+        if (!treasuries.contains(t_name)) {
+            option::none()
+        } else {
+            let tc: &TreasuryCap<T> = &treasuries[t_name];
+            some(tc.total_supply())
+        }
     }
 }
 
